@@ -3,120 +3,214 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Smartphone } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { toast } from "@/components/ui/use-toast"
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const [formData, setFormData] = useState({
+    nombre: "",
+    cedula: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    tipo: "",
+    aceptaTerminos: false,
+  })
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  const handleSelectChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      tipo: value,
+    }))
+  }
+
+  const handleCheckboxChange = (checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      aceptaTerminos: checked,
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Las contraseñas no coinciden.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.aceptaTerminos) {
+      toast({
+        title: "Error",
+        description: "Debes aceptar los términos y condiciones.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
-    setError(null)
 
     try {
-      // Registrar usuario con Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
-          },
-        },
+      // Simulación de registro
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+
+      // Guardar en localStorage para simular autenticación
+      localStorage.setItem(
+        "ecotech_user",
+        JSON.stringify({
+          nombre: formData.nombre,
+          email: formData.email,
+          tipo: formData.tipo,
+          isLoggedIn: true,
+        }),
+      )
+
+      toast({
+        title: "Registro exitoso",
+        description: "Tu cuenta ha sido creada correctamente.",
       })
 
-      if (authError) throw authError
-
-      if (authData.user) {
-        // Crear entrada en la tabla usuarios
-        const { error: profileError } = await supabase.from("usuarios").insert({
-          id: authData.user.id,
-          nombre: name,
-          correo: email,
-          rol: "vendedor", // Rol por defecto
-        })
-
-        if (profileError) throw profileError
-
-        router.push("/auth/verification")
-      }
-    } catch (error: any) {
-      setError(error.message || "Error al registrarse")
+      // Redireccionar al dashboard
+      router.push("/dashboard")
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo completar el registro.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center">
-            <Smartphone className="h-12 w-12 text-primary" />
-          </div>
-          <CardTitle className="text-2xl">Crear cuenta</CardTitle>
-          <CardDescription>Regístrate para acceder al sistema de Eco_Tech</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <form onSubmit={handleRegister} className="space-y-4">
+        <form onSubmit={handleSubmit}>
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold text-center">Crear Cuenta</CardTitle>
+            <CardDescription className="text-center">Ingresa tus datos para registrarte en Eco_Tech</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre completo</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <Label htmlFor="nombre">Nombre Completo</Label>
+              <Input
+                id="nombre"
+                name="nombre"
+                placeholder="Tu nombre completo"
+                value={formData.nombre}
+                onChange={handleChange}
+                required
+              />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="email">Correo electrónico</Label>
+              <Label htmlFor="cedula">Cédula / Documento de Identidad</Label>
+              <Input
+                id="cedula"
+                name="cedula"
+                placeholder="Número de cédula o documento"
+                value={formData.cedula}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Correo Electrónico</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 placeholder="tu@correo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={formData.email}
+                onChange={handleChange}
                 required
               />
             </div>
+
+            <div className="grid gap-4 grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirmar Contraseña</Label>
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  placeholder="••••••••"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <Label htmlFor="tipo">Tipo de Usuario</Label>
+              <Select value={formData.tipo} onValueChange={handleSelectChange} required>
+                <SelectTrigger id="tipo">
+                  <SelectValue placeholder="Selecciona tu rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="administrador">Administrador</SelectItem>
+                  <SelectItem value="tecnico">Técnico</SelectItem>
+                  <SelectItem value="vendedor">Vendedor</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox id="terms" checked={formData.aceptaTerminos} onCheckedChange={handleCheckboxChange} required />
+              <Label htmlFor="terms" className="text-sm">
+                Acepto los términos y condiciones
+              </Label>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Registrando..." : "Registrarse"}
             </Button>
-          </form>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            ¿Ya tienes una cuenta?{" "}
-            <Link href="/auth/login" className="text-primary hover:underline">
-              Inicia sesión
-            </Link>
-          </p>
-        </CardFooter>
+            <div className="text-center text-sm">
+              ¿Ya tienes una cuenta?{" "}
+              <Link href="/login" className="text-primary underline hover:text-primary/90">
+                Iniciar Sesión
+              </Link>
+            </div>
+          </CardFooter>
+        </form>
       </Card>
     </div>
   )
 }
-

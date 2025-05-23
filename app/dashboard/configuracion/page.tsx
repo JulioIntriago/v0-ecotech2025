@@ -12,7 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { Smartphone, Save } from "lucide-react"
+import { Smartphone, Save, Settings, Shield, Database, MessageSquare } from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
+import Link from "next/link"
 
 export default function ConfiguracionPage() {
   // Estado para la configuración general
@@ -106,7 +108,10 @@ export default function ConfiguracionPage() {
     })
 
     // Mostrar mensaje de éxito
-    alert("Configuración guardada correctamente")
+    toast({
+      title: "Configuración guardada",
+      description: "La configuración ha sido guardada correctamente.",
+    })
   }
 
   return (
@@ -120,9 +125,51 @@ export default function ConfiguracionPage() {
         </Button>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="flex flex-col items-center p-4 text-center">
+          <Settings className="mb-2 h-8 w-8 text-primary" />
+          <h3 className="text-lg font-medium">Configuración General</h3>
+          <p className="mb-4 text-sm text-muted-foreground">Ajustes básicos del sistema</p>
+          <Button variant="outline" className="mt-auto w-full" asChild>
+            <Link href="#general" onClick={() => document.getElementById("general-tab")?.click()}>
+              Ir a Configuración
+            </Link>
+          </Button>
+        </Card>
+
+        <Card className="flex flex-col items-center p-4 text-center">
+          <Shield className="mb-2 h-8 w-8 text-primary" />
+          <h3 className="text-lg font-medium">Permisos</h3>
+          <p className="mb-4 text-sm text-muted-foreground">Gestión de roles y permisos</p>
+          <Button variant="outline" className="mt-auto w-full" asChild>
+            <Link href="/dashboard/configuracion/permisos">Administrar Permisos</Link>
+          </Button>
+        </Card>
+
+        <Card className="flex flex-col items-center p-4 text-center">
+          <Database className="mb-2 h-8 w-8 text-primary" />
+          <h3 className="text-lg font-medium">Respaldo</h3>
+          <p className="mb-4 text-sm text-muted-foreground">Respaldo y restauración</p>
+          <Button variant="outline" className="mt-auto w-full" asChild>
+            <Link href="/dashboard/configuracion/respaldo">Gestionar Respaldos</Link>
+          </Button>
+        </Card>
+
+        <Card className="flex flex-col items-center p-4 text-center">
+          <MessageSquare className="mb-2 h-8 w-8 text-primary" />
+          <h3 className="text-lg font-medium">WhatsApp</h3>
+          <p className="mb-4 text-sm text-muted-foreground">Integración con WhatsApp</p>
+          <Button variant="outline" className="mt-auto w-full" asChild>
+            <Link href="/dashboard/configuracion/whatsapp">Configurar WhatsApp</Link>
+          </Button>
+        </Card>
+      </div>
+
       <Tabs defaultValue="general">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="general" id="general-tab">
+            General
+          </TabsTrigger>
           <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
           <TabsTrigger value="facturacion">Facturación</TabsTrigger>
           <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
@@ -325,7 +372,7 @@ export default function ConfiguracionPage() {
                 <Textarea
                   id="notaFactura"
                   name="notaFactura"
-                  rows={2}
+                  rows={3}
                   value={configFacturacion.notaFactura}
                   onChange={handleFacturacionChange}
                 />
@@ -338,7 +385,7 @@ export default function ConfiguracionPage() {
           <Card>
             <CardHeader>
               <CardTitle>Configuración de Usuarios</CardTitle>
-              <CardDescription>Administra las opciones de usuarios y permisos</CardDescription>
+              <CardDescription>Administra los permisos y accesos de usuarios</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
@@ -359,7 +406,9 @@ export default function ConfiguracionPage() {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="aprobacionManual">Aprobación Manual de Usuarios</Label>
-                    <p className="text-xs text-muted-foreground">Requiere aprobación manual para nuevos usuarios</p>
+                    <p className="text-xs text-muted-foreground">
+                      Requiere aprobación manual para nuevos usuarios registrados
+                    </p>
                   </div>
                   <Switch
                     id="aprobacionManual"
@@ -370,13 +419,13 @@ export default function ConfiguracionPage() {
               </div>
 
               <div className="space-y-2 pt-4">
-                <Label htmlFor="rolPredeterminado">Rol Predeterminado</Label>
+                <Label htmlFor="rolPredeterminado">Rol Predeterminado para Nuevos Usuarios</Label>
                 <Select
                   value={configUsuarios.rolPredeterminado}
                   onValueChange={(value) => handleSelectChange("usuarios", "rolPredeterminado", value)}
                 >
                   <SelectTrigger id="rolPredeterminado">
-                    <SelectValue placeholder="Selecciona un rol" />
+                    <SelectValue placeholder="Selecciona un rol predeterminado" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Administrador</SelectItem>
@@ -384,7 +433,55 @@ export default function ConfiguracionPage() {
                     <SelectItem value="vendedor">Vendedor</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-xs text-muted-foreground">Rol asignado a los nuevos usuarios al registrarse</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Seguridad</CardTitle>
+              <CardDescription>Configura las políticas de seguridad del sistema</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="autenticacionDosFactores">Autenticación de Dos Factores</Label>
+                    <p className="text-xs text-muted-foreground">Requiere verificación adicional al iniciar sesión</p>
+                  </div>
+                  <Switch
+                    id="autenticacionDosFactores"
+                    checked={true}
+                    onCheckedChange={() => {
+                      toast({
+                        title: "Función Premium",
+                        description: "Esta función está disponible en el plan Premium.",
+                      })
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tiempoSesion">Tiempo de Sesión (minutos)</Label>
+                  <Input id="tiempoSesion" type="number" min="5" max="1440" defaultValue="60" disabled />
+                  <p className="text-xs text-muted-foreground">
+                    Tiempo de inactividad antes de cerrar sesión automáticamente
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="politicaContrasenas">Política de Contraseñas</Label>
+                  <Select defaultValue="media">
+                    <SelectTrigger id="politicaContrasenas">
+                      <SelectValue placeholder="Selecciona una política" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="baja">Básica (mínimo 6 caracteres)</SelectItem>
+                      <SelectItem value="media">Media (mínimo 8 caracteres, incluir números)</SelectItem>
+                      <SelectItem value="alta">Alta (mínimo 10 caracteres, incluir números y símbolos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -393,4 +490,3 @@ export default function ConfiguracionPage() {
     </div>
   )
 }
-

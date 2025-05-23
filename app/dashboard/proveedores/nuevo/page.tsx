@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -25,6 +24,7 @@ export default function NuevoProveedorPage() {
     contacto_nombre: "",
     contacto_telefono: "",
     notas: "",
+    documento: "", // Solo un campo para RUC/Cédula
   })
   const [loading, setLoading] = useState(false)
 
@@ -48,13 +48,8 @@ export default function NuevoProveedorPage() {
     setLoading(true)
 
     try {
-      // Aquí iría la lógica para guardar en Supabase
       console.log("Datos del proveedor:", formData)
-
-      // Simular tiempo de carga
       await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Redireccionar a la lista de proveedores
       router.push("/dashboard/proveedores")
     } catch (error) {
       console.error("Error al crear el proveedor:", error)
@@ -95,6 +90,18 @@ export default function NuevoProveedorPage() {
                 />
               </div>
 
+              {/* Campo único para documento (RUC/Cédula) */}
+              <div className="space-y-2">
+                <Label htmlFor="documento">RUC/Cédula</Label>
+                <Input
+                  id="documento"
+                  name="documento"
+                  placeholder="Ingrese RUC o Cédula"
+                  value={formData.documento}
+                  onChange={handleChange}
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="tipo">Tipo de Proveedor</Label>
                 <Select value={formData.tipo} onValueChange={(value) => handleSelectChange("tipo", value)} required>
@@ -114,6 +121,7 @@ export default function NuevoProveedorPage() {
                 </Select>
               </div>
 
+              {/* Resto de los campos permanecen igual */}
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="telefono">Teléfono</Label>
@@ -201,4 +209,3 @@ export default function NuevoProveedorPage() {
     </div>
   )
 }
-
