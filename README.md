@@ -22,11 +22,3 @@ Puedes ver la versión en línea del proyecto aquí:
 
 🔗 
 
-## Cómo ejecutar el proyecto localmente
-
-1. Clona este repositorio:
-
-```bash
-git clone https://github.com/tu-usuario/ecotech.git
-cd ecotech
-npm run dev
