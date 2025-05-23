@@ -29,3 +29,4 @@ Puedes ver la versión en línea del proyecto aquí:
 ```bash
 git clone https://github.com/tu-usuario/ecotech.git
 cd ecotech
+npm run dev
