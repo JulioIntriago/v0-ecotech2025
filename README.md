@@ -1,30 +1,31 @@
 # Ecotech
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/juliointriagos-projects/v0-spanish-language)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/I1X8cS7rtn1)
+## Descripción
 
-## Overview
+**Ecotech** es una plataforma desarrollada para ofrecer soluciones tecnológicas enfocadas en sostenibilidad, innovación y eficiencia digital. El proyecto está construido con tecnologías modernas como Next.js y Tailwind CSS, y se implementa en Vercel para garantizar rendimiento y escalabilidad.
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Objetivo
+
+El propósito de Ecotech es brindar herramientas digitales que optimicen procesos, integren tecnologías limpias y faciliten la transformación digital de empresas y organizaciones comprometidas con el desarrollo sostenible.
+
+## Características
+
+- Interfaz moderna, responsiva y accesible
+- Componentes reutilizables con enfoque en buenas prácticas de desarrollo
+- Arquitectura optimizada para rendimiento en producción
+- Implementación CI/CD mediante Vercel
 
 ## Deployment
 
-Your project is live at:
+Puedes ver la versión en línea del proyecto aquí:
 
-**[https://vercel.com/juliointriagos-projects/v0-spanish-language](https://vercel.com/juliointriagos-projects/v0-spanish-language)**
+🔗 
 
-## Build your app
+## Cómo ejecutar el proyecto localmente
 
-Continue building your app on:
+1. Clona este repositorio:
 
-**[https://v0.dev/chat/projects/I1X8cS7rtn1](https://v0.dev/chat/projects/I1X8cS7rtn1)**
-
-## How It Works
-
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+```bash
+git clone https://github.com/tu-usuario/ecotech.git
+cd ecotech

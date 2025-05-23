@@ -1,9 +1,26 @@
+"use client";
+import React from "react";
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Smartphone, Settings, ShoppingBag, Clock, Shield, MapPin, Phone, Mail } from "lucide-react"
+import { Input } from "@/components/ui/input"
+
 
 export default function LandingPage() {
+  const handleContact = async (e: { preventDefault: () => void; target: { nombre: { value: any }; cedula_ruc: { value: any }; telefono: { value: any } } }) => {
+    e.preventDefault()
+    const formData = {
+      nombre: e.target.nombre.value,
+      cedula_ruc: e.target.cedula_ruc.value,
+      telefono: e.target.telefono.value,
+    }
+    // Guardar en Supabase (tabla contact_requests)
+    console.log("Formulario de contacto enviado:", formData)
+    // Aquí podrías integrar una notificación al admin o vendedor
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header/Navbar */}
@@ -33,14 +50,7 @@ export default function LandingPage() {
               Contacto
             </Link>
           </nav>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/login">Iniciar Sesión</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/register">Registrarse</Link>
-            </Button>
-          </div>
+          {/* Enlace oculto para personal interno en el footer */}
         </div>
       </header>
 
@@ -55,12 +65,37 @@ export default function LandingPage() {
               Especialistas en reparación de celulares y venta de accesorios. Servicio rápido, eficiente y con garantía.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-4">
-              <Button size="lg" asChild>
-                <Link href="/register">Comenzar ahora</Link>
+              <Button size="lg" variant="outline" asChild>
+                <Link href="#contacto">Contáctanos</Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
                 <Link href="#servicios">Ver servicios</Link>
               </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* Consulta de Estado Section */}
+        <section className="py-20">
+          <div className="container">
+            <div className="mb-12 text-center">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Consulta tu Orden o Compra</h2>
+              <p className="mt-4 text-muted-foreground">
+                Ingresa tu número de orden o venta para ver el estado de tu solicitud
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+const orderId = (e.target as HTMLFormElement)["orderId"].value
+                  window.location.href = `/client/status/${orderId}`
+                }}
+                className="flex w-full max-w-md gap-2"
+              >
+                <Input name="orderId" placeholder="Ingresa tu número de orden o venta (e.g., ORD123)" />
+                <Button type="submit">Consultar</Button>
+              </form>
             </div>
           </div>
         </section>
@@ -208,8 +243,8 @@ export default function LandingPage() {
               </Card>
             </div>
             <div className="mt-12 flex justify-center">
-              <Button size="lg" asChild>
-                <Link href="/register">Registrarse ahora</Link>
+              <Button size="lg" variant="outline" asChild>
+                <Link href="#contacto">Solicitar Seguimiento</Link>
               </Button>
             </div>
           </div>
@@ -233,6 +268,9 @@ export default function LandingPage() {
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-primary">
                 Privacidad
+              </Link>
+              <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-primary">
+                Acceso para Equipo
               </Link>
             </div>
           </div>

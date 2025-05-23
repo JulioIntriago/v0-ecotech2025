@@ -204,7 +204,7 @@ export default function RegisterPage() {
             </Button>
             <div className="text-center text-sm">
               ¿Ya tienes una cuenta?{" "}
-              <Link href="/login" className="text-primary underline hover:text-primary/90">
+              <Link href="/auth/login" className="text-primary underline hover:text-primary/90">
                 Iniciar Sesión
               </Link>
             </div>
