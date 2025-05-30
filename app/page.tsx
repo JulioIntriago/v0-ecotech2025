@@ -1,29 +1,100 @@
 "use client";
-import React from "react";
-
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Smartphone, Settings, ShoppingBag, Clock, Shield, MapPin, Phone, Mail } from "lucide-react"
-import { Input } from "@/components/ui/input"
-
+import React, { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Smartphone, Settings, ShoppingBag, Clock, Shield, MapPin, Phone, Mail } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export default function LandingPage() {
-  const handleContact = async (e: { preventDefault: () => void; target: { nombre: { value: any }; cedula_ruc: { value: any }; telefono: { value: any } } }) => {
-    e.preventDefault()
+  const [statusData, setStatusData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const handleContact = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     const formData = {
-      nombre: e.target.nombre.value,
-      cedula_ruc: e.target.cedula_ruc.value,
-      telefono: e.target.telefono.value,
+      nombre: (e.target as any).nombre.value,
+      cedula_ruc: (e.target as any).cedula_ruc.value,
+      telefono: (e.target as any).telefono.value,
+      email: (e.target as any).email.value,
+      direccion: (e.target as any).direccion.value,
+      mensaje: (e.target as any).mensaje.value,
+    };
+
+    try {
+      const { error: contactError } = await supabase.from("contact_requests").insert(formData);
+      if (contactError) throw contactError;
+
+      const { data: admins } = await supabase.from("users").select("id").eq("role", "admin");
+      if (admins) {
+        const notifications = admins.map((admin: any) => ({
+          user_id: admin.id,
+          tipo: "contact_request",
+          titulo: "Nueva solicitud de contacto",
+          mensaje: `Solicitud de ${formData.nombre} (${formData.cedula_ruc})`,
+          fecha: new Date().toISOString(),
+          leida: false,
+          accion: `/dashboard/contact-requests`,
+          icono: "Mail",
+        }));
+        await supabase.from("notificaciones").insert(notifications);
+      }
+
+      toast({ title: "Mensaje enviado", description: "Gracias por contactarnos." });
+    } catch (error: any) {
+      toast({ title: "Error", description: "No se pudo enviar el mensaje.", variant: "destructive" });
     }
-    // Guardar en Supabase (tabla contact_requests)
-    console.log("Formulario de contacto enviado:", formData)
-    // Aquí podrías integrar una notificación al admin o vendedor
-  }
+  };
+
+  const handleStatusCheck = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setStatusData(null); // Limpiar datos anteriores
+    const orderId = (e.target as HTMLFormElement)["orderId"].value;
+
+    try {
+      // Consultar órdenes primero
+      let { data: order, error: orderError } = await supabase
+        .from("ordenes")
+        .select("*, clientes(nombre), equipos(marca, modelo)")
+        .eq("numero_orden", orderId)
+        .single();
+
+      if (order) {
+        setStatusData({ type: "orden", ...order });
+        setOpen(true);
+      } else if (!orderError) {
+        // Si no hay error de orden, consultar ventas
+        let { data: sale, error: saleError } = await supabase
+          .from("ventas")
+          .select("*, clientes(nombre)")
+          .eq("numero_venta", orderId)
+          .single();
+
+        if (sale) {
+          setStatusData({ type: "venta", ...sale });
+          setOpen(true);
+        } else if (!saleError) {
+          setError("No se encontró la orden o venta con ese número.");
+        }
+      }
+    } catch (err) {
+      setError("Error al consultar el estado. Intenta de nuevo.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Header/Navbar */}
       <header className="sticky top-0 z-40 border-b bg-background">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
@@ -31,31 +102,20 @@ export default function LandingPage() {
             <span className="text-xl font-bold">Eco_Tech</span>
           </div>
           <nav className="hidden space-x-4 md:flex">
-            <Link
-              href="#servicios"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-            >
+            <Link href="#servicios" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
               Servicios
             </Link>
-            <Link
-              href="#nosotros"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-            >
+            <Link href="#nosotros" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
               Nosotros
             </Link>
-            <Link
-              href="#contacto"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-            >
+            <Link href="#contacto" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
               Contacto
             </Link>
           </nav>
-          {/* Enlace oculto para personal interno en el footer */}
         </div>
       </header>
 
       <main className="flex-1">
-        {/* Hero Section */}
         <section className="bg-gradient-to-b from-background to-muted py-20">
           <div className="container flex flex-col items-center text-center">
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
@@ -75,7 +135,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Consulta de Estado Section */}
         <section className="py-20">
           <div className="container">
             <div className="mb-12 text-center">
@@ -85,22 +144,44 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="flex justify-center">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-const orderId = (e.target as HTMLFormElement)["orderId"].value
-                  window.location.href = `/client/status/${orderId}`
-                }}
-                className="flex w-full max-w-md gap-2"
-              >
-                <Input name="orderId" placeholder="Ingresa tu número de orden o venta (e.g., ORD123)" />
-                <Button type="submit">Consultar</Button>
+              <form onSubmit={handleStatusCheck} className="flex w-full max-w-md gap-2">
+                <Input name="orderId" placeholder="Ingresa tu número de orden o venta (e.g., ORD123)" disabled={loading} />
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Cargando..." : "Consultar"}
+                </Button>
               </form>
             </div>
+            {error && <p className="mt-4 text-center text-red-500">{error}</p>}
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Estado de tu {statusData?.type || "solicitud"}</DialogTitle>
+                </DialogHeader>
+                {loading ? (
+                  <div className="text-center">Cargando...</div>
+                ) : statusData ? (
+                  <div className="space-y-2">
+                    <p><strong>Número:</strong> {statusData.numero_orden || statusData.numero_venta}</p>
+                    <p><strong>Cliente:</strong> {statusData.clientes?.nombre || "No disponible"}</p>
+                    {statusData.type === "orden" && (
+                      <>
+                        <p><strong>Equipo:</strong> {statusData.equipos?.marca} {statusData.equipos?.modelo}</p>
+                        <p><strong>Estado:</strong> {statusData.estado || "Sin estado definido"}</p>
+                      </>
+                    )}
+                    {statusData.type === "venta" && (
+                      <>
+                        <p><strong>Total:</strong> ${statusData.total || "No disponible"}</p>
+                        <p><strong>Fecha:</strong> {statusData.created_at ? new Date(statusData.created_at).toLocaleDateString() : "No disponible"}</p>
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              </DialogContent>
+            </Dialog>
           </div>
         </section>
 
-        {/* Services Section */}
         <section id="servicios" className="py-20">
           <div className="container">
             <div className="mb-12 text-center">
@@ -139,7 +220,6 @@ const orderId = (e.target as HTMLFormElement)["orderId"].value
           </div>
         </section>
 
-        {/* Features Section */}
         <section className="bg-muted py-20">
           <div className="container">
             <div className="mb-12 text-center">
@@ -180,7 +260,6 @@ const orderId = (e.target as HTMLFormElement)["orderId"].value
           </div>
         </section>
 
-        {/* About Us Section */}
         <section id="nosotros" className="py-20">
           <div className="container">
             <div className="grid gap-12 md:grid-cols-2">
@@ -210,7 +289,6 @@ const orderId = (e.target as HTMLFormElement)["orderId"].value
           </div>
         </section>
 
-        {/* Contact Section */}
         <section id="contacto" className="bg-muted py-20">
           <div className="container">
             <div className="mb-12 text-center">
@@ -242,16 +320,39 @@ const orderId = (e.target as HTMLFormElement)["orderId"].value
                 <p className="text-muted-foreground">contacto@ecotech.com</p>
               </Card>
             </div>
-            <div className="mt-12 flex justify-center">
-              <Button size="lg" variant="outline" asChild>
-                <Link href="#contacto">Solicitar Seguimiento</Link>
-              </Button>
+            <div className="mt-12">
+              <form onSubmit={handleContact} className="mx-auto max-w-md space-y-4">
+                <div>
+                  <Label htmlFor="nombre">Nombre</Label>
+                  <Input id="nombre" name="nombre" placeholder="Tu nombre" required />
+                </div>
+                <div>
+                  <Label htmlFor="cedula_ruc">Cédula/RUC</Label>
+                  <Input id="cedula_ruc" name="cedula_ruc" placeholder="Cédula o RUC" />
+                </div>
+                <div>
+                  <Label htmlFor="telefono">Teléfono</Label>
+                  <Input id="telefono" name="telefono" placeholder="Teléfono" />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
+                </div>
+                <div>
+                  <Label htmlFor="direccion">Dirección</Label>
+                  <Input id="direccion" name="direccion" placeholder="Dirección" />
+                </div>
+                <div>
+                  <Label htmlFor="mensaje">Mensaje</Label>
+                  <Textarea id="mensaje" name="mensaje" placeholder="Escribe tu mensaje" required />
+                </div>
+                <Button type="submit" className="w-full">Enviar Mensaje</Button>
+              </form>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="border-t bg-background py-8">
         <div className="container">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
@@ -277,5 +378,5 @@ const orderId = (e.target as HTMLFormElement)["orderId"].value
         </div>
       </footer>
     </div>
-  )
+  );
 }
