@@ -1,54 +1,65 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+"use client";
 
-const recentOrders = [
-  {
-    id: "ORD-001",
-    cliente: "Juan Pérez",
-    dispositivo: "iPhone 12",
-    problema: "Pantalla rota",
-    estado: "En proceso",
-    fecha: "2023-05-15",
-  },
-  {
-    id: "ORD-002",
-    cliente: "María López",
-    dispositivo: "Samsung S21",
-    problema: "Batería",
-    estado: "Pendiente",
-    fecha: "2023-05-14",
-  },
-  {
-    id: "ORD-003",
-    cliente: "Carlos Ruiz",
-    dispositivo: "Xiaomi Mi 11",
-    problema: "No enciende",
-    estado: "Finalizado",
-    fecha: "2023-05-13",
-  },
-  {
-    id: "ORD-004",
-    cliente: "Ana Gómez",
-    dispositivo: "Motorola G9",
-    problema: "Micrófono",
-    estado: "Entregado",
-    fecha: "2023-05-12",
-  },
-  {
-    id: "ORD-005",
-    cliente: "Pedro Sánchez",
-    dispositivo: "iPhone 11",
-    problema: "Cámara",
-    estado: "En proceso",
-    fecha: "2023-05-11",
-  },
-]
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function RecentOrders() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("ordenes")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (error) {
+          console.error("Error fetching orders:", error);
+        } else {
+          // Obtener datos de equipos para cada orden
+          const ordersWithEquipment = await Promise.all(
+            (data || []).map(async (order) => {
+              const { data: equipmentData, error: equipmentError } = await supabase
+                .from("equipos")
+                .select("marca, modelo")
+                .eq("id", order.equipo_id)
+                .single();
+
+              if (equipmentError) {
+                console.error("Error fetching equipment for order", order.id, ":", equipmentError);
+              }
+
+              return {
+                ...order,
+                equipo_marca: equipmentData?.marca || "Desconocido",
+                equipo_modelo: equipmentData?.modelo || "Desconocido",
+              };
+            })
+          );
+
+          setOrders(ordersWithEquipment);
+        }
+      } catch (error) {
+        console.error("General error fetching orders:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, []);
+
+  if (loading) return <div className="p-6">Cargando órdenes...</div>;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -72,19 +83,21 @@ export function RecentOrders() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recentOrders.map((order) => (
+            {orders.map((order) => (
               <TableRow key={order.id}>
-                <TableCell className="font-medium">{order.id}</TableCell>
-                <TableCell>{order.cliente}</TableCell>
-                <TableCell className="hidden md:table-cell">{order.dispositivo}</TableCell>
+                <TableCell className="font-medium">{order.numero_orden || order.id}</TableCell>
+                <TableCell>{order.cliente_nombre}</TableCell>
+                <TableCell className="hidden md:table-cell">
+                  {order.equipo_marca} {order.equipo_modelo}
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant={
                       order.estado === "Finalizado" || order.estado === "Entregado"
                         ? "success"
                         : order.estado === "En proceso"
-                          ? "default"
-                          : "secondary"
+                        ? "default"
+                        : "secondary"
                     }
                   >
                     {order.estado}
@@ -111,6 +124,5 @@ export function RecentOrders() {
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 }
-

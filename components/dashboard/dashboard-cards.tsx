@@ -1,7 +1,17 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ClipboardList, DollarSign, Package, Users } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ClipboardList, DollarSign, Package, Users } from "lucide-react";
 
-export function DashboardCards() {
+interface DashboardCardsProps {
+  metrics: {
+    activeOrders: number;
+    monthlySales: number;
+    stockItems: number;
+    lowStockItems: number;
+    newClients: number;
+  };
+}
+
+export function DashboardCards({ metrics }: DashboardCardsProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <Card>
@@ -10,7 +20,7 @@ export function DashboardCards() {
           <ClipboardList className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">24</div>
+          <div className="text-2xl font-bold">{metrics.activeOrders}</div>
           <p className="text-xs text-muted-foreground">+5% desde el mes pasado</p>
         </CardContent>
       </Card>
@@ -20,7 +30,7 @@ export function DashboardCards() {
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">$15,234</div>
+          <div className="text-2xl font-bold">${metrics.monthlySales.toFixed(2)}</div>
           <p className="text-xs text-muted-foreground">+12% desde el mes pasado</p>
         </CardContent>
       </Card>
@@ -30,8 +40,8 @@ export function DashboardCards() {
           <Package className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">342</div>
-          <p className="text-xs text-muted-foreground">8 productos con stock bajo</p>
+          <div className="text-2xl font-bold">{metrics.stockItems}</div>
+          <p className="text-xs text-muted-foreground">{metrics.lowStockItems} productos con stock bajo</p>
         </CardContent>
       </Card>
       <Card>
@@ -40,11 +50,10 @@ export function DashboardCards() {
           <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">18</div>
+          <div className="text-2xl font-bold">{metrics.newClients}</div>
           <p className="text-xs text-muted-foreground">+2% desde el mes pasado</p>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

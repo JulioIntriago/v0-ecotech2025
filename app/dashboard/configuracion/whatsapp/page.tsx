@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,26 +12,70 @@ import { Textarea } from "@/components/ui/textarea"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ArrowLeft, Save, MessageSquare, Send } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
+
+interface ConfigWhatsApp {
+  habilitado: boolean
+  numeroTelefono: string
+  accessToken: string
+  idCuenta: string
+  mensajeBienvenida: string
+  notificarOrdenes: boolean
+  notificarVentas: boolean
+  notificarReparaciones: boolean
+  plantillaOrden: string
+  plantillaReparacion: string
+  plantillaVenta: string
+}
 
 export default function WhatsAppPage() {
-  const [configuracion, setConfiguracion] = useState({
-    habilitado: true,
-    numeroTelefono: "+521234567890",
-    accessToken: "EAABZCz...token_parcial...XYZ",
-    idCuenta: "123456789",
-    mensajeBienvenida: "¡Hola! Gracias por contactar a Eco_Tech. ¿En qué podemos ayudarte?",
-    notificarOrdenes: true,
-    notificarVentas: true,
-    notificarReparaciones: true,
-    plantillaOrden: "Hola {cliente}, tu orden #{orden_id} ha sido registrada. Estado actual: {estado}.",
-    plantillaReparacion:
-      "Hola {cliente}, tu reparación de {dispositivo} está {estado}. Puedes recogerlo en nuestra tienda.",
-    plantillaVenta: "Hola {cliente}, gracias por tu compra #{venta_id} por ${total}. ¡Esperamos verte pronto!",
+  const [configuracion, setConfiguracion] = useState<ConfigWhatsApp>({
+    habilitado: false,
+    numeroTelefono: "",
+    accessToken: "",
+    idCuenta: "",
+    mensajeBienvenida: "",
+    notificarOrdenes: false,
+    notificarVentas: false,
+    notificarReparaciones: false,
+    plantillaOrden: "",
+    plantillaReparacion: "",
+    plantillaVenta: "",
   })
 
   const [numeroTest, setNumeroTest] = useState("")
   const [mensajeTest, setMensajeTest] = useState("")
   const [enviando, setEnviando] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Cargar configuración desde Supabase
+  useEffect(() => {
+    const fetchConfiguracion = async () => {
+      setLoading(true)
+
+      const { data, error } = await supabase
+        .from("configuraciones")
+        .select("whatsapp")
+        .eq("id", "global_config")
+        .single()
+
+      if (error) {
+        console.error("Error fetching whatsapp configuracion:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la configuración de WhatsApp.",
+          variant: "destructive",
+        })
+      } else if (data && data.whatsapp) {
+        setConfiguracion(data.whatsapp)
+      }
+
+      setLoading(false)
+    }
+
+    fetchConfiguracion()
+  }, [])
 
   // Manejar cambios en los campos
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -51,15 +94,38 @@ export default function WhatsAppPage() {
     }))
   }
 
-  // Guardar configuración
-  const guardarConfiguracion = () => {
-    toast({
-      title: "Configuración guardada",
-      description: "La configuración de WhatsApp ha sido actualizada.",
-    })
+  // Guardar configuración en Supabase
+  const guardarConfiguracion = async () => {
+    setSaving(true)
+
+    try {
+      const { error } = await supabase
+        .from("configuraciones")
+        .upsert({
+          id: "global_config",
+          whatsapp: configuracion,
+          updated_at: new Date().toISOString(),
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Configuración guardada",
+        description: "La configuración de WhatsApp ha sido actualizada.",
+      })
+    } catch (error) {
+      console.error("Error saving whatsapp configuracion:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo guardar la configuración.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  // Enviar mensaje de prueba
+  // Enviar mensaje de prueba (simulado)
   const enviarMensajePrueba = async () => {
     if (!numeroTest) {
       toast({
@@ -103,6 +169,10 @@ export default function WhatsAppPage() {
     }
   }
 
+  if (loading) {
+    return <div className="flex flex-col gap-6 p-6"><DashboardHeader /><div>Cargando configuración...</div></div>
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <DashboardHeader />
@@ -115,9 +185,9 @@ export default function WhatsAppPage() {
           </Button>
           <h2 className="text-2xl font-bold tracking-tight">Configuración de WhatsApp</h2>
         </div>
-        <Button onClick={guardarConfiguracion}>
+        <Button onClick={guardarConfiguracion} disabled={saving}>
           <Save className="mr-2 h-4 w-4" />
-          Guardar Cambios
+          {saving ? "Guardando..." : "Guardar Cambios"}
         </Button>
       </div>
 

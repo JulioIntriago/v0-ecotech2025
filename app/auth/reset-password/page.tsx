@@ -1,43 +1,41 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useState } from "react"
-import Link from "next/link"
-import { supabase } from "@/lib/supabase"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { KeyRound } from "lucide-react"
+import { useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { KeyRound } from "lucide-react";
 
 export default function ResetPasswordPage() {
-  const [email, setEmail] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSuccess(false)
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
-      })
+        redirectTo: `${window.location.origin}/auth/update-password`, // Asegúrate de crear esta página si la necesitas
+      });
 
-      if (error) throw error
+      if (error) throw error;
 
-      setSuccess(true)
+      setSuccess(true);
     } catch (error: any) {
-      setError(error.message || "Error al enviar el correo de recuperación")
+      setError(error.message || "Error al enviar el correo de recuperación");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
@@ -88,6 +86,5 @@ export default function ResetPasswordPage() {
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }
-

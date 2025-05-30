@@ -1,107 +1,16 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Search } from "lucide-react"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-
-// Datos de ejemplo para órdenes de trabajo
-const ordenes = [
-  {
-    id: "ORD-001",
-    cliente: "Juan Pérez",
-    dispositivo: "iPhone 12",
-    problema: "Pantalla rota",
-    estado: "pendiente",
-    fecha_ingreso: "2023-05-15",
-    fecha_entrega: null,
-    costo_estimado: 120,
-    tecnico_asignado: null,
-  },
-  {
-    id: "ORD-002",
-    cliente: "María López",
-    dispositivo: "Samsung S21",
-    problema: "Batería",
-    estado: "en_proceso",
-    fecha_ingreso: "2023-05-14",
-    fecha_entrega: null,
-    costo_estimado: 45,
-    tecnico_asignado: "Carlos Ruiz",
-  },
-  {
-    id: "ORD-003",
-    cliente: "Carlos Ruiz",
-    dispositivo: "Xiaomi Mi 11",
-    problema: "No enciende",
-    estado: "finalizado",
-    fecha_ingreso: "2023-05-13",
-    fecha_entrega: "2023-05-16",
-    costo_estimado: 80,
-    tecnico_asignado: "Laura Méndez",
-  },
-  {
-    id: "ORD-004",
-    cliente: "Ana Gómez",
-    dispositivo: "Motorola G9",
-    problema: "Micrófono",
-    estado: "entregado",
-    fecha_ingreso: "2023-05-12",
-    fecha_entrega: "2023-05-15",
-    costo_estimado: 35,
-    tecnico_asignado: "Carlos Ruiz",
-  },
-  {
-    id: "ORD-005",
-    cliente: "Pedro Sánchez",
-    dispositivo: "iPhone 11",
-    problema: "Cámara",
-    estado: "en_proceso",
-    fecha_ingreso: "2023-05-11",
-    fecha_entrega: null,
-    costo_estimado: 60,
-    tecnico_asignado: "Laura Méndez",
-  },
-  {
-    id: "ORD-006",
-    cliente: "Lucía Martínez",
-    dispositivo: "Huawei P40",
-    problema: "Altavoz",
-    estado: "pendiente",
-    fecha_ingreso: "2023-05-16",
-    fecha_entrega: null,
-    costo_estimado: 40,
-    tecnico_asignado: null,
-  },
-  {
-    id: "ORD-007",
-    cliente: "Roberto Díaz",
-    dispositivo: "OnePlus 9",
-    problema: "Conector de carga",
-    estado: "en_proceso",
-    fecha_ingreso: "2023-05-15",
-    fecha_entrega: null,
-    costo_estimado: 55,
-    tecnico_asignado: "Carlos Ruiz",
-  },
-  {
-    id: "ORD-008",
-    cliente: "Elena Torres",
-    dispositivo: "Samsung A52",
-    problema: "Botones físicos",
-    estado: "finalizado",
-    fecha_ingreso: "2023-05-14",
-    fecha_entrega: "2023-05-17",
-    costo_estimado: 30,
-    tecnico_asignado: "Laura Méndez",
-  },
-]
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 
 // Función para traducir el estado
 function traducirEstado(estado: string) {
@@ -110,8 +19,8 @@ function traducirEstado(estado: string) {
     en_proceso: "En Proceso",
     finalizado: "Finalizado",
     entregado: "Entregado",
-  }
-  return traducciones[estado] || estado
+  };
+  return traducciones[estado] || estado;
 }
 
 // Función para determinar la variante del badge según el estado
@@ -121,25 +30,65 @@ function getVariantForEstado(estado: string) {
     en_proceso: "default",
     finalizado: "success",
     entregado: "outline",
-  }
-  return variantes[estado] || "default"
+  };
+  return variantes[estado] || "default";
 }
 
 export default function OrdenesPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos")
+  const [orders, setOrders] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("ordenes")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Error fetching orders:", error);
+        } else {
+          setOrders(data || []);
+        }
+      } catch (error) {
+        console.error("General error fetching orders:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+
+    // Suscripción en tiempo real (opcional, descomenta si lo deseas)
+    // const channel = supabase
+    //   .channel("ordenes-changes")
+    //   .on("postgres_changes", { event: "*", schema: "public", table: "ordenes" }, (payload) => {
+    //     fetchOrders(); // Recarga las órdenes cuando haya cambios
+    //   })
+    //   .subscribe();
+
+    // Limpieza de la suscripción (descomenta si usas la suscripción)
+    // return () => {
+    //   supabase.removeChannel(channel);
+    // };
+  }, []);
 
   // Filtrar órdenes según búsqueda y estado
-  const ordenesFiltradas = ordenes.filter((orden) => {
+  const ordenesFiltradas = orders.filter((orden) => {
     const matchesSearch =
       orden.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      orden.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      orden.dispositivo.toLowerCase().includes(searchQuery.toLowerCase())
+      orden.cliente_nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      orden.dispositivo.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesEstado = filtroEstado === "todos" || orden.estado === filtroEstado
+    const matchesEstado = filtroEstado === "todos" || orden.estado === filtroEstado;
 
-    return matchesSearch && matchesEstado
-  })
+    return matchesSearch && matchesEstado;
+  });
+
+  if (loading) return <div className="p-6">Cargando órdenes...</div>;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -209,13 +158,13 @@ export default function OrdenesPage() {
                 ordenesFiltradas.map((orden) => (
                   <TableRow key={orden.id}>
                     <TableCell className="font-medium">{orden.id}</TableCell>
-                    <TableCell>{orden.cliente}</TableCell>
+                    <TableCell>{orden.cliente_nombre}</TableCell>
                     <TableCell className="hidden md:table-cell">{orden.dispositivo}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{orden.problema}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{orden.problema}</TableCell>fecha_ingreso 
                     <TableCell>
                       <Badge variant={getVariantForEstado(orden.estado)}>{traducirEstado(orden.estado)}</Badge>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">{orden.fecha_ingreso}</TableCell>
+                    <TableCell className="hidden md:table-cell">{orden.created_at}</TableCell>
                     <TableCell className="hidden lg:table-cell">{orden.tecnico_asignado || "Sin asignar"}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" asChild>
@@ -230,6 +179,5 @@ export default function OrdenesPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

@@ -36,12 +36,13 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DatePickerWithRange } from "@/components/dashboard/date-range-picker"
 import { format, subDays, isWithinInterval, parseISO } from "date-fns"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
 // Tipos
 interface Venta {
   id: string
-  fecha: string
-  cliente: string | null
+  fecha_venta: string
+  cliente_nombre: string | null
   cliente_id: string | null
   total: number
   metodo_pago: string
@@ -49,12 +50,13 @@ interface Venta {
   usuario: string
   descuento_general: number
   descuento_tipo: string
-  productos: ProductoVendido[]
   notas?: string
+  productos_venta: ProductoVendido[]
 }
 
 interface ProductoVendido {
   id: string
+  producto_id: string
   nombre: string
   precio: number
   cantidad: number
@@ -69,93 +71,6 @@ interface Cliente {
   email: string | null
   telefono: string | null
 }
-
-// Datos de ejemplo para ventas
-const ventasData: Venta[] = Array.from({ length: 50 }, (_, i) => {
-  const id = `VTA-${String(i + 1).padStart(4, "0")}`
-  const daysAgo = Math.floor(Math.random() * 30)
-  const fecha = format(subDays(new Date(), daysAgo), "yyyy-MM-dd'T'HH:mm:ss")
-  const cliente =
-    Math.random() > 0.2
-      ? ["Juan Pérez", "María López", "Carlos Ruiz", "Ana Gómez", "Pedro Sánchez", "Lucía Martínez"][
-          Math.floor(Math.random() * 6)
-        ]
-      : null
-  const cliente_id = cliente ? `CLI-${String(Math.floor(Math.random() * 100)).padStart(3, "0")}` : null
-  const metodo_pago = ["Efectivo", "Tarjeta", "Transferencia"][Math.floor(Math.random() * 3)]
-  const estado = ["completada", "anulada", "pendiente"][Math.random() > 0.9 ? (Math.random() > 0.5 ? 1 : 2) : 0]
-  const usuario = ["Admin", "Vendedor1", "Vendedor2"][Math.floor(Math.random() * 3)]
-  const descuento_general = Math.random() > 0.7 ? Math.floor(Math.random() * 15) + 5 : 0
-  const descuento_tipo = Math.random() > 0.5 ? "porcentaje" : "monto"
-
-  // Generar productos aleatorios para esta venta
-  const numProductos = Math.floor(Math.random() * 5) + 1
-  const productos: ProductoVendido[] = Array.from({ length: numProductos }, (_, j) => {
-    const productoId = `PRD-${String(Math.floor(Math.random() * 100)).padStart(3, "0")}`
-    const nombres = [
-      "Protector de pantalla",
-      "Cargador rápido",
-      "Funda protectora",
-      "Auriculares inalámbricos",
-      "Soporte para auto",
-      "Cable USB",
-      "Batería externa",
-      "Adaptador",
-      "Memoria SD",
-      "Selfie stick",
-    ]
-    const nombre = nombres[Math.floor(Math.random() * nombres.length)]
-    const precio = Math.floor(Math.random() * 100) + 10
-    const cantidad = Math.floor(Math.random() * 3) + 1
-    const descuento = Math.random() > 0.8 ? Math.floor(Math.random() * 10) + 1 : 0
-    const descuento_tipo = Math.random() > 0.5 ? "porcentaje" : "monto"
-    const subtotal =
-      cantidad * precio -
-      (descuento_tipo === "porcentaje" ? (cantidad * precio * descuento) / 100 : Math.min(descuento, cantidad * precio))
-
-    return {
-      id: productoId,
-      nombre,
-      precio,
-      cantidad,
-      descuento,
-      descuento_tipo,
-      subtotal,
-    }
-  })
-
-  // Calcular total basado en productos y descuento general
-  let total = productos.reduce((sum, p) => sum + p.subtotal, 0)
-  if (descuento_general > 0) {
-    total =
-      descuento_tipo === "porcentaje" ? total * (1 - descuento_general / 100) : Math.max(0, total - descuento_general)
-  }
-
-  return {
-    id,
-    fecha,
-    cliente,
-    cliente_id,
-    total: Math.round(total * 100) / 100,
-    metodo_pago,
-    estado,
-    usuario,
-    descuento_general,
-    descuento_tipo,
-    productos,
-    notas: Math.random() > 0.7 ? "Venta con descuento especial" : undefined,
-  }
-})
-
-// Datos de ejemplo para clientes
-const clientesData: Cliente[] = [
-  { id: "CLI-001", nombre: "Juan Pérez", email: "juan@example.com", telefono: "555-1234" },
-  { id: "CLI-002", nombre: "María López", email: "maria@example.com", telefono: "555-5678" },
-  { id: "CLI-003", nombre: "Carlos Ruiz", email: "carlos@example.com", telefono: "555-9012" },
-  { id: "CLI-004", nombre: "Ana Gómez", email: "ana@example.com", telefono: "555-3456" },
-  { id: "CLI-005", nombre: "Pedro Sánchez", email: "pedro@example.com", telefono: "555-7890" },
-  { id: "CLI-006", nombre: "Lucía Martínez", email: "lucia@example.com", telefono: "555-2345" },
-]
 
 export default function VentasPage() {
   const router = useRouter()
@@ -179,7 +94,7 @@ export default function VentasPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Estado para ordenamiento
-  const [sortField, setSortField] = useState<string>("fecha")
+  const [sortField, setSortField] = useState<string>("fecha_venta")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
 
   // Estado para vista (tabla o tarjetas)
@@ -191,96 +106,162 @@ export default function VentasPage() {
   // Estado para ventas filtradas
   const [ventasFiltradas, setVentasFiltradas] = useState<Venta[]>([])
   const [loading, setLoading] = useState(false)
+  const [clientes, setClientes] = useState<Cliente[]>([])
+
+  // Cargar datos de Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+
+      try {
+        // Cargar ventas con productos_venta e inventario
+        const { data: ventasData, error: ventasError } = await supabase
+          .from("ventas")
+          .select(`
+            id,
+            fecha_venta,
+            cliente_nombre,
+            cliente_id,
+            total,
+            metodo_pago,
+            estado,
+            usuario,
+            descuento_general,
+            descuento_tipo,
+            notas,
+            productos_venta (
+              id,
+              producto_id,
+              cantidad,
+              precio_final,
+              inventario (nombre, precio)
+            )
+          `)
+          .order("fecha_venta", { ascending: false })
+
+        if (ventasError) throw ventasError
+
+        // Transformar datos para incluir productos con descuentos
+        const ventasConProductos: Venta[] = ventasData.map((venta) => ({
+          ...venta,
+          fecha_venta: venta.fecha_venta,
+          productos_venta: venta.productos_venta.map((pv: any) => ({
+            id: pv.id,
+            producto_id: pv.producto_id,
+            nombre: pv.inventario?.nombre || "Producto desconocido",
+            precio: pv.inventario?.precio || pv.precio_final,
+            cantidad: pv.cantidad,
+            descuento: 0, // Ajustar según tu lógica de descuento
+            descuento_tipo: "monto", // Ajustar según tu esquema
+            subtotal: pv.cantidad * pv.precio_final,
+          })),
+        }))
+
+        setVentasFiltradas(ventasConProductos)
+
+        // Cargar clientes
+        const { data: clientesData, error: clientesError } = await supabase
+          .from("clientes")
+          .select("id, nombre, email, telefono")
+
+        if (clientesError) throw clientesError
+        setClientes(clientesData || [])
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: `No se pudieron cargar los datos: ${error.message}`,
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
 
   // Efecto para aplicar filtros
   useEffect(() => {
     setLoading(true)
 
-    // Simular delay de carga
-    const timer = setTimeout(() => {
-      let filtered = [...ventasData]
+    let filtered = [...ventasFiltradas]
 
-      // Filtro por búsqueda (ID, cliente)
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        filtered = filtered.filter(
-          (venta) =>
-            venta.id.toLowerCase().includes(query) || (venta.cliente && venta.cliente.toLowerCase().includes(query)),
-        )
-      }
+    // Filtro por búsqueda (ID, cliente)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(
+        (venta) =>
+          venta.id.toLowerCase().includes(query) ||
+          (venta.cliente_nombre && venta.cliente_nombre.toLowerCase().includes(query)),
+      )
+    }
 
-      // Filtro por rango de fechas
-      if (dateRange?.from && dateRange?.to) {
-        filtered = filtered.filter((venta) => {
-          const ventaDate = parseISO(venta.fecha)
-          return isWithinInterval(ventaDate, {
-            start: dateRange.from,
-            end: dateRange.to,
-          })
-        })
-      }
-
-      // Filtro por método de pago
-      if (metodoPago !== "todos") {
-        filtered = filtered.filter((venta) => venta.metodo_pago === metodoPago)
-      }
-
-      // Filtro por estado
-      if (estado !== "todos") {
-        filtered = filtered.filter((venta) => venta.estado === estado)
-      }
-
-      // Filtro por vendedor
-      if (vendedor !== "todos") {
-        filtered = filtered.filter((venta) => venta.usuario === vendedor)
-      }
-
-      // Filtro por monto mínimo
-      if (montoMinimo) {
-        filtered = filtered.filter((venta) => venta.total >= Number.parseFloat(montoMinimo))
-      }
-
-      // Filtro por monto máximo
-      if (montoMaximo) {
-        filtered = filtered.filter((venta) => venta.total <= Number.parseFloat(montoMaximo))
-      }
-
-      // Filtro por cliente
-      if (clienteSeleccionado !== "todos") {
-        filtered = filtered.filter((venta) => venta.cliente_id === clienteSeleccionado)
-      }
-
-      // Ordenar resultados
-      filtered.sort((a, b) => {
-        let comparison = 0
-
-        switch (sortField) {
-          case "fecha":
-            comparison = new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
-            break
-          case "id":
-            comparison = a.id.localeCompare(b.id)
-            break
-          case "cliente":
-            const clienteA = a.cliente || ""
-            const clienteB = b.cliente || ""
-            comparison = clienteA.localeCompare(clienteB)
-            break
-          case "total":
-            comparison = a.total - b.total
-            break
-          default:
-            comparison = 0
-        }
-
-        return sortDirection === "asc" ? comparison : -comparison
+    // Filtro por rango de fechas
+    if (dateRange?.from && dateRange?.to) {
+      filtered = filtered.filter((venta) => {
+        const ventaDate = parseISO(venta.fecha_venta)
+        return isWithinInterval(ventaDate, { start: dateRange.from, end: dateRange.to })
       })
+    }
 
-      setVentasFiltradas(filtered)
-      setLoading(false)
-    }, 300)
+    // Filtro por método de pago
+    if (metodoPago !== "todos") {
+      filtered = filtered.filter((venta) => venta.metodo_pago === metodoPago)
+    }
 
-    return () => clearTimeout(timer)
+    // Filtro por estado
+    if (estado !== "todos") {
+      filtered = filtered.filter((venta) => venta.estado === estado)
+    }
+
+    // Filtro por vendedor
+    if (vendedor !== "todos") {
+      filtered = filtered.filter((venta) => venta.usuario === vendedor)
+    }
+
+    // Filtro por monto mínimo
+    if (montoMinimo) {
+      filtered = filtered.filter((venta) => venta.total >= Number.parseFloat(montoMinimo))
+    }
+
+    // Filtro por monto máximo
+    if (montoMaximo) {
+      filtered = filtered.filter((venta) => venta.total <= Number.parseFloat(montoMaximo))
+    }
+
+    // Filtro por cliente
+    if (clienteSeleccionado !== "todos") {
+      filtered = filtered.filter((venta) => venta.cliente_id === clienteSeleccionado)
+    }
+
+    // Ordenar resultados
+    filtered.sort((a, b) => {
+      let comparison = 0
+
+      switch (sortField) {
+        case "fecha_venta":
+          comparison = new Date(a.fecha_venta).getTime() - new Date(b.fecha_venta).getTime()
+          break
+        case "id":
+          comparison = a.id.localeCompare(b.id)
+          break
+        case "cliente_nombre":
+          const clienteA = a.cliente_nombre || ""
+          const clienteB = b.cliente_nombre || ""
+          comparison = clienteA.localeCompare(clienteB)
+          break
+        case "total":
+          comparison = a.total - b.total
+          break
+        default:
+          comparison = 0
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison
+    })
+
+    setVentasFiltradas(filtered)
+    setLoading(false)
   }, [
     searchQuery,
     dateRange,
@@ -302,10 +283,7 @@ export default function VentasPage() {
   // Función para limpiar todos los filtros
   const clearAllFilters = () => {
     setSearchQuery("")
-    setDateRange({
-      from: subDays(new Date(), 30),
-      to: new Date(),
-    })
+    setDateRange({ from: subDays(new Date(), 30), to: new Date() })
     setMetodoPago("todos")
     setEstado("todos")
     setVendedor("todos")
@@ -322,8 +300,8 @@ export default function VentasPage() {
       ...ventasFiltradas.map((venta) =>
         [
           venta.id,
-          format(new Date(venta.fecha), "dd/MM/yyyy HH:mm"),
-          venta.cliente || "Cliente anónimo",
+          format(new Date(venta.fecha_venta), "dd/MM/yyyy HH:mm"),
+          venta.cliente_nombre || "Cliente anónimo",
           venta.total.toFixed(2),
           venta.metodo_pago,
           venta.estado,
@@ -369,8 +347,12 @@ export default function VentasPage() {
     if (!confirm("¿Está seguro que desea anular esta venta?")) return
 
     try {
-      // Aquí iría la lógica para anular en la base de datos
-      console.log("Anulando venta:", ventaId)
+      const { error } = await supabase
+        .from("ventas")
+        .update({ estado: "anulada" })
+        .eq("id", ventaId)
+
+      if (error) throw error
 
       toast({
         title: "Venta anulada",
@@ -378,11 +360,52 @@ export default function VentasPage() {
       })
 
       // Recargar datos
-      window.location.reload()
-    } catch (error) {
+      const { data: updatedVentas, error: fetchError } = await supabase
+        .from("ventas")
+        .select(`
+          id,
+          fecha_venta,
+          cliente_nombre,
+          cliente_id,
+          total,
+          metodo_pago,
+          estado,
+          usuario,
+          descuento_general,
+          descuento_tipo,
+          notas,
+          productos_venta (
+            id,
+            producto_id,
+            cantidad,
+            precio_final,
+            inventario (nombre, precio)
+          )
+        `)
+        .order("fecha_venta", { ascending: false })
+
+      if (fetchError) throw fetchError
+
+      const ventasConProductos: Venta[] = updatedVentas.map((venta) => ({
+        ...venta,
+        fecha_venta: venta.fecha_venta,
+        productos_venta: venta.productos_venta.map((pv: any) => ({
+          id: pv.id,
+          producto_id: pv.producto_id,
+          nombre: pv.inventario?.nombre || "Producto desconocido",
+          precio: pv.inventario?.precio || pv.precio_final,
+          cantidad: pv.cantidad,
+          descuento: 0,
+          descuento_tipo: "monto",
+          subtotal: pv.cantidad * pv.precio_final,
+        })),
+      }))
+
+      setVentasFiltradas(ventasConProductos)
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "No se pudo anular la venta. Intente nuevamente.",
+        description: `No se pudo anular la venta: ${error.message}`,
         variant: "destructive",
       })
     }
@@ -396,7 +419,7 @@ export default function VentasPage() {
     ventasPendientes: ventasFiltradas.filter((v) => v.estado === "pendiente").length,
     montoTotal: ventasFiltradas.filter((v) => v.estado === "completada").reduce((sum, v) => sum + v.total, 0),
     promedioVenta:
-      ventasFiltradas.length > 0
+      ventasFiltradas.filter((v) => v.estado === "completada").length > 0
         ? ventasFiltradas.filter((v) => v.estado === "completada").reduce((sum, v) => sum + v.total, 0) /
           ventasFiltradas.filter((v) => v.estado === "completada").length
         : 0,
@@ -594,7 +617,7 @@ export default function VentasPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos</SelectItem>
-                    {clientesData.map((cliente) => (
+                    {clientes.map((cliente) => (
                       <SelectItem key={cliente.id} value={cliente.id}>
                         {cliente.nombre}
                       </SelectItem>
@@ -644,11 +667,11 @@ export default function VentasPage() {
                   <TableHead className="cursor-pointer" onClick={() => handleSort("id")}>
                     ID {renderSortIndicator("id")}
                   </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort("fecha")}>
-                    Fecha {renderSortIndicator("fecha")}
+                  <TableHead className="cursor-pointer" onClick={() => handleSort("fecha_venta")}>
+                    Fecha {renderSortIndicator("fecha_venta")}
                   </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort("cliente")}>
-                    Cliente {renderSortIndicator("cliente")}
+                  <TableHead className="cursor-pointer" onClick={() => handleSort("cliente_nombre")}>
+                    Cliente {renderSortIndicator("cliente_nombre")}
                   </TableHead>
                   <TableHead className="cursor-pointer text-right" onClick={() => handleSort("total")}>
                     Total {renderSortIndicator("total")}
@@ -670,11 +693,11 @@ export default function VentasPage() {
                   paginatedVentas.map((venta) => (
                     <TableRow key={venta.id} className={venta.estado === "anulada" ? "bg-red-50" : ""}>
                       <TableCell className="font-medium">{venta.id}</TableCell>
-                      <TableCell>{format(new Date(venta.fecha), "dd/MM/yyyy HH:mm")}</TableCell>
-                      <TableCell>{venta.cliente || "Cliente anónimo"}</TableCell>
+                      <TableCell>{format(new Date(venta.fecha_venta), "dd/MM/yyyy HH:mm")}</TableCell>
+                      <TableCell>{venta.cliente_nombre || "Cliente anónimo"}</TableCell>
                       <TableCell className="text-right">
                         ${venta.total.toFixed(2)}
-                        {(venta.descuento_general > 0 || venta.productos.some((p) => p.descuento > 0)) && (
+                        {(venta.descuento_general > 0 || venta.productos_venta.some((p) => p.descuento > 0)) && (
                           <Badge variant="outline" className="ml-2 bg-green-50">
                             Con descuento
                           </Badge>
@@ -758,7 +781,6 @@ export default function VentasPage() {
               </PaginationItem>
 
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                // Lógica para mostrar páginas alrededor de la página actual
                 let pageNum
                 if (totalPages <= 5) {
                   pageNum = i + 1

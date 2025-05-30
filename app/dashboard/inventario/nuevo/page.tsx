@@ -14,8 +14,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
-// Datos de ejemplo para proveedores
 const proveedores = [
   { id: "PROV-001", nombre: "TechParts Inc." },
   { id: "PROV-002", nombre: "BatteryPlus" },
@@ -24,7 +24,6 @@ const proveedores = [
   { id: "PROV-005", nombre: "CaseMakers" },
 ]
 
-// Categorías disponibles
 const categorias = ["Repuestos", "Accesorios", "Cables", "Audio", "Baterías", "Protectores", "Fundas", "Otros"]
 
 export default function NuevoProductoPage() {
@@ -35,7 +34,7 @@ export default function NuevoProductoPage() {
     descripcion: "",
     precio_compra: "",
     precio_venta: "",
-    cantidad: "",
+    stock: "", // Cambiado de 'cantidad' a 'stock'
     stock_minimo: "",
     ubicacion: "",
     proveedor_id: "",
@@ -62,8 +61,27 @@ export default function NuevoProductoPage() {
     setLoading(true)
 
     try {
-      // Simulación de guardado
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Validar campos numéricos
+      const parsedData = {
+        nombre: formData.nombre,
+        categoria_id: formData.categoria, // Usamos 'categoria' como categoría_id
+        descripcion: formData.descripcion,
+        precio_compra: parseFloat(formData.precio_compra) || 0,
+        precio: parseFloat(formData.precio_venta) || 0, // 'precio' es el precio de venta en la tabla
+        stock: parseInt(formData.stock, 10) || 0, // Cambiado de 'cantidad' a 'stock'
+        stock_minimo: parseInt(formData.stock_minimo, 10) || 0,
+        ubicacion: formData.ubicacion,
+        proveedor_id: formData.proveedor_id,
+      }
+
+      if (!parsedData.nombre || !parsedData.categoria_id || !parsedData.proveedor_id) {
+        throw new Error("Por favor completa los campos obligatorios (Nombre, Categoría, Proveedor).")
+      }
+
+      // Guardar en Supabase
+      const { error } = await supabase.from("inventario").insert([parsedData])
+
+      if (error) throw error
 
       toast({
         title: "Producto creado",
@@ -71,10 +89,10 @@ export default function NuevoProductoPage() {
       })
 
       router.push("/dashboard/inventario")
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "No se pudo crear el producto.",
+        description: error.message || "No se pudo crear el producto.",
         variant: "destructive",
       })
     } finally {
@@ -198,13 +216,13 @@ export default function NuevoProductoPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="cantidad">Cantidad Inicial</Label>
+                  <Label htmlFor="stock">Stock Inicial</Label> {/* Cambiado de 'Cantidad Inicial' a 'Stock Inicial' */}
                   <Input
-                    id="cantidad"
-                    name="cantidad"
+                    id="stock"
+                    name="stock" // Cambiado de 'cantidad' a 'stock'
                     type="number"
                     min="0"
-                    value={formData.cantidad}
+                    value={formData.stock}
                     onChange={handleChange}
                     required
                   />

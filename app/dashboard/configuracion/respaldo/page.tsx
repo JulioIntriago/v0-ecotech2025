@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,15 +13,55 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ArrowLeft, Download, Upload, Calendar, Clock, Database } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
+import { supabase } from "@/lib/supabase"
+
+interface ConfigRespaldos {
+  respaldoAutomatico: boolean
+  frecuencia: string
+  horaRespaldo: string
+  diasRetencion: string
+}
 
 export default function RespaldoPage() {
-  const [respaldoAutomatico, setRespaldoAutomatico] = useState(true)
-  const [frecuencia, setFrecuencia] = useState("diario")
-  const [horaRespaldo, setHoraRespaldo] = useState("02:00")
-  const [diasRetencion, setDiasRetencion] = useState("30")
+  const [config, setConfig] = useState<ConfigRespaldos>({
+    respaldoAutomatico: false,
+    frecuencia: "",
+    horaRespaldo: "",
+    diasRetencion: "",
+  })
   const [archivoRestauracion, setArchivoRestauracion] = useState<File | null>(null)
   const [progreso, setProgreso] = useState(0)
   const [cargando, setCargando] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Cargar configuración desde Supabase
+  useEffect(() => {
+    const fetchConfig = async () => {
+      setLoading(true)
+
+      const { data, error } = await supabase
+        .from("configuraciones")
+        .select("respaldos")
+        .eq("id", "global_config")
+        .single()
+
+      if (error) {
+        console.error("Error fetching respaldos configuracion:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la configuración de respaldos.",
+          variant: "destructive",
+        })
+      } else if (data && data.respaldos) {
+        setConfig(data.respaldos)
+      }
+
+      setLoading(false)
+    }
+
+    fetchConfig()
+  }, [])
 
   // Simular respaldo de datos
   const realizarRespaldo = async () => {
@@ -113,12 +152,47 @@ export default function RespaldoPage() {
     }
   }
 
-  // Guardar configuración de respaldos
-  const guardarConfiguracion = () => {
-    toast({
-      title: "Configuración guardada",
-      description: "La configuración de respaldos ha sido actualizada.",
-    })
+  // Guardar configuración de respaldos en Supabase
+  const guardarConfiguracion = async () => {
+    setSaving(true)
+
+    try {
+      const { error } = await supabase
+        .from("configuraciones")
+        .upsert({
+          id: "global_config",
+          respaldos: config,
+          updated_at: new Date().toISOString(),
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Configuración guardada",
+        description: "La configuración de respaldos ha sido actualizada.",
+      })
+    } catch (error) {
+      console.error("Error saving respaldos configuracion:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo guardar la configuración.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Manejar cambios en los campos
+  const handleConfigChange = (field: keyof ConfigRespaldos, value: any) => {
+    setConfig((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  if (loading) {
+    return <div className="flex flex-col gap-6 p-6"><DashboardHeader /><div>Cargando configuración...</div></div>
   }
 
   return (
@@ -229,13 +303,21 @@ export default function RespaldoPage() {
               <Label htmlFor="respaldo-automatico">Respaldo Automático</Label>
               <p className="text-xs text-muted-foreground">Habilitar respaldos automáticos programados</p>
             </div>
-            <Switch id="respaldo-automatico" checked={respaldoAutomatico} onCheckedChange={setRespaldoAutomatico} />
+            <Switch
+              id="respaldo-automatico"
+              checked={config.respaldoAutomatico}
+              onCheckedChange={(value) => handleConfigChange("respaldoAutomatico", value)}
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="frecuencia">Frecuencia</Label>
-              <Select value={frecuencia} onValueChange={setFrecuencia} disabled={!respaldoAutomatico}>
+              <Select
+                value={config.frecuencia}
+                onValueChange={(value) => handleConfigChange("frecuencia", value)}
+                disabled={!config.respaldoAutomatico}
+              >
                 <SelectTrigger id="frecuencia">
                   <SelectValue placeholder="Selecciona frecuencia" />
                 </SelectTrigger>
@@ -254,9 +336,9 @@ export default function RespaldoPage() {
                 <Input
                   id="hora-respaldo"
                   type="time"
-                  value={horaRespaldo}
-                  onChange={(e) => setHoraRespaldo(e.target.value)}
-                  disabled={!respaldoAutomatico}
+                  value={config.horaRespaldo}
+                  onChange={(e) => handleConfigChange("horaRespaldo", e.target.value)}
+                  disabled={!config.respaldoAutomatico}
                 />
               </div>
             </div>
@@ -270,9 +352,9 @@ export default function RespaldoPage() {
                   type="number"
                   min="1"
                   max="365"
-                  value={diasRetencion}
-                  onChange={(e) => setDiasRetencion(e.target.value)}
-                  disabled={!respaldoAutomatico}
+                  value={config.diasRetencion}
+                  onChange={(e) => handleConfigChange("diasRetencion", e.target.value)}
+                  disabled={!config.respaldoAutomatico}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -281,8 +363,8 @@ export default function RespaldoPage() {
             </div>
           </div>
 
-          <Button onClick={guardarConfiguracion} disabled={!respaldoAutomatico}>
-            Guardar Configuración
+          <Button onClick={guardarConfiguracion} disabled={saving || !config.respaldoAutomatico}>
+            {saving ? "Guardando..." : "Guardar Configuración"}
           </Button>
         </CardContent>
       </Card>

@@ -1,122 +1,126 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { ArrowLeft, Minus, Plus, Search, Trash } from "lucide-react"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ArrowLeft, Minus, Plus, Search, Trash } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
 
-// Datos de ejemplo para clientes y productos
-const clientes = [
-  { id: "CLI-001", nombre: "Juan Pérez" },
-  { id: "CLI-002", nombre: "María López" },
-  { id: "CLI-003", nombre: "Carlos Ruiz" },
-  { id: "CLI-004", nombre: "Ana Gómez" },
-  { id: "CLI-005", nombre: "Pedro Sánchez" },
-]
+// Tipos
+interface Cliente {
+  id: string;
+  nombre: string;
+}
 
-const productos = [
-  {
-    id: "PROD-001",
-    nombre: "Pantalla iPhone 12",
-    categoria: "Repuestos",
-    precio: 120,
-    cantidad: 5,
-  },
-  {
-    id: "PROD-002",
-    nombre: "Batería Samsung S21",
-    categoria: "Repuestos",
-    precio: 45,
-    cantidad: 8,
-  },
-  {
-    id: "PROD-003",
-    nombre: "Cargador USB-C",
-    categoria: "Accesorios",
-    precio: 15,
-    cantidad: 12,
-  },
-  {
-    id: "PROD-004",
-    nombre: "Protector Pantalla iPhone 13",
-    categoria: "Accesorios",
-    precio: 10,
-    cantidad: 25,
-  },
-  {
-    id: "PROD-005",
-    nombre: "Funda iPhone 12",
-    categoria: "Accesorios",
-    precio: 18,
-    cantidad: 15,
-  },
-  {
-    id: "PROD-006",
-    nombre: "Cable Lightning 2m",
-    categoria: "Cables",
-    precio: 12,
-    cantidad: 20,
-  },
-  {
-    id: "PROD-007",
-    nombre: "Auriculares Bluetooth",
-    categoria: "Audio",
-    precio: 35,
-    cantidad: 7,
-  },
-  {
-    id: "PROD-008",
-    nombre: "Batería Externa 10000mAh",
-    categoria: "Baterías",
-    precio: 25,
-    cantidad: 10,
-  },
-]
-
-// Métodos de pago disponibles
-const metodosPago = ["Efectivo", "Tarjeta", "Transferencia"]
+interface Producto {
+  id: string;
+  nombre: string;
+  categoria: string;
+  precio: number;
+  cantidad: number;
+}
 
 interface ProductoCarrito {
-  id: string
-  nombre: string
-  precio: number
-  cantidad: number
-  subtotal: number
+  id: string;
+  nombre: string;
+  precio: number;
+  cantidad: number;
+  subtotal: number;
 }
 
 export default function NuevaVentaPage() {
-  const router = useRouter()
-  const [clienteId, setClienteId] = useState("")
-  const [metodoPago, setMetodoPago] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [carrito, setCarrito] = useState<ProductoCarrito[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+  const [clienteId, setClienteId] = useState("");
+  const [metodoPago, setMetodoPago] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [carrito, setCarrito] = useState<ProductoCarrito[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Estados para datos de Supabase
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Cargar clientes y productos desde Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoadingData(true);
+      try {
+        // Cargar clientes
+        const { data: clientesData, error: clientesError } = await supabase
+          .from("clientes")
+          .select("id, nombre");
+
+        if (clientesError) throw clientesError;
+        setClientes(clientesData || []);
+
+        // Cargar productos
+        const { data: productosData, error: productosError } = await supabase
+          .from("inventario")
+          .select("id, nombre, categoria:categorias_productos!inner(nombre), precio, cantidad");
+
+        if (productosError) throw productosError;
+
+        const mappedProductos: Producto[] = productosData.map((p: any) => ({
+          id: p.id,
+          nombre: p.nombre,
+          categoria: p.categoria?.nombre || "Sin categoría",
+          precio: p.precio || 0,
+          cantidad: p.cantidad || 0,
+        }));
+
+        setProductos(mappedProductos);
+      } catch (error: any) {
+        console.error("Error fetching data:", error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los clientes o productos.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // Filtrar productos según búsqueda
   const productosFiltrados = productos.filter((producto) =>
     producto.nombre.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  );
 
   // Actualizar total cuando cambia el carrito
   useEffect(() => {
-    const nuevoTotal = carrito.reduce((sum, item) => sum + item.subtotal, 0)
-    setTotal(nuevoTotal)
-  }, [carrito])
+    const nuevoTotal = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+    setTotal(nuevoTotal);
+  }, [carrito]);
 
   // Agregar producto al carrito
-  const agregarProducto = (producto: (typeof productos)[0]) => {
-    const productoExistente = carrito.find((item) => item.id === producto.id)
+  const agregarProducto = (producto: Producto) => {
+    const productoExistente = carrito.find((item) => item.id === producto.id);
 
     if (productoExistente) {
-      // Si ya existe, incrementar cantidad
+      // Si ya existe, incrementar cantidad (verificar stock disponible)
+      const productoInventario = productos.find((p) => p.id === producto.id);
+      if (productoInventario && productoExistente.cantidad >= productoInventario.cantidad) {
+        toast({
+          title: "Stock insuficiente",
+          description: `No hay suficiente stock de ${producto.nombre}. Disponible: ${productoInventario.cantidad} unidades.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setCarrito(
         carrito.map((item) =>
           item.id === producto.id
@@ -127,7 +131,7 @@ export default function NuevaVentaPage() {
               }
             : item,
         ),
-      )
+      );
     } else {
       // Si no existe, agregar nuevo
       setCarrito([
@@ -139,12 +143,24 @@ export default function NuevaVentaPage() {
           cantidad: 1,
           subtotal: producto.precio,
         },
-      ])
+      ]);
     }
-  }
+  };
 
   // Incrementar cantidad de un producto en el carrito
   const incrementarCantidad = (id: string) => {
+    const productoExistente = carrito.find((item) => item.id === id);
+    const productoInventario = productos.find((p) => p.id === id);
+
+    if (productoExistente && productoInventario && productoExistente.cantidad >= productoInventario.cantidad) {
+      toast({
+        title: "Stock insuficiente",
+        description: `No hay suficiente stock de ${productoExistente.nombre}. Disponible: ${productoInventario.cantidad} unidades.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setCarrito(
       carrito.map((item) =>
         item.id === id
@@ -155,8 +171,8 @@ export default function NuevaVentaPage() {
             }
           : item,
       ),
-    )
-  }
+    );
+  };
 
   // Decrementar cantidad de un producto en el carrito
   const decrementarCantidad = (id: string) => {
@@ -170,47 +186,122 @@ export default function NuevaVentaPage() {
             }
           : item,
       ),
-    )
-  }
+    );
+  };
 
   // Eliminar producto del carrito
   const eliminarProducto = (id: string) => {
-    setCarrito(carrito.filter((item) => item.id !== id))
-  }
+    setCarrito(carrito.filter((item) => item.id !== id));
+  };
 
   // Procesar la venta
   const procesarVenta = async () => {
     if (carrito.length === 0) {
-      alert("El carrito está vacío")
-      return
+      toast({
+        title: "Carrito vacío",
+        description: "El carrito está vacío. Agrega productos para continuar.",
+        variant: "destructive",
+      });
+      return;
     }
 
     if (!metodoPago) {
-      alert("Selecciona un método de pago")
-      return
+      toast({
+        title: "Método de pago requerido",
+        description: "Selecciona un método de pago para continuar.",
+        variant: "destructive",
+      });
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
     try {
-      // Aquí iría la lógica para guardar en Supabase
-      console.log("Datos de la venta:", {
-        cliente_id: clienteId,
-        metodo_pago: metodoPago,
-        total,
-        productos: carrito,
-      })
+      // Generar un ID único para la venta
+      const ventaId = `VTA-${Date.now()}-${Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, "0")}`;
 
-      // Simular tiempo de carga
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Guardar la venta en la tabla `ventas`
+      const { error: ventaError } = await supabase.from("ventas").insert({
+        id: ventaId,
+        cliente_id: clienteId === "anonymous" ? null : clienteId || null,
+        subtotal: total,
+        descuento_general: 0, // No se manejan descuentos generales en este formulario
+        impuesto: 0, // Asumimos que no hay impuestos por ahora
+        total,
+        total_ahorrado: 0,
+        factura_generada: false,
+        numero_venta: ventaId,
+        metodo_pago: metodoPago,
+        estado: "completada",
+      });
+
+      if (ventaError) throw ventaError;
+
+      // Guardar los productos de la venta en la tabla `productos_venta`
+      const productosVenta = carrito.map((item) => ({
+        venta_id: ventaId,
+        producto_id: item.id,
+        cantidad: item.cantidad,
+        precio_final: item.precio,
+        descuento: 0, // No se manejan descuentos por producto en este formulario
+        descuento_tipo: "monto",
+      }));
+
+      const { error: productosError } = await supabase.from("productos_venta").insert(productosVenta);
+
+      if (productosError) throw productosError;
+
+      // Actualizar el stock en la tabla `inventario`
+      for (const item of carrito) {
+        const producto = productos.find((p) => p.id === item.id);
+        if (producto) {
+          const nuevoStock = producto.cantidad - item.cantidad;
+          const { error: stockError } = await supabase
+            .from("inventario")
+            .update({ cantidad: nuevoStock })
+            .eq("id", item.id);
+
+          if (stockError) throw stockError;
+        }
+      }
+
+      // Registrar movimiento en `movimientos_inventario` (salida por venta)
+      const movimientos = carrito.map((item) => ({
+        producto_id: item.id,
+        tipo: "salida",
+        cantidad: item.cantidad,
+        fecha: new Date().toISOString(),
+        referencia: `Venta ${ventaId}`,
+        usuario_id: "Sistema", // Ajusta según tu lógica de autenticación
+      }));
+
+      const { error: movimientosError } = await supabase.from("movimientos_inventario").insert(movimientos);
+
+      if (movimientosError) throw movimientosError;
+
+      toast({
+        title: "Venta completada",
+        description: "La venta se ha registrado correctamente.",
+      });
 
       // Redireccionar a la lista de ventas
-      router.push("/dashboard/ventas")
-    } catch (error) {
-      console.error("Error al procesar la venta:", error)
+      router.push("/dashboard/ventas");
+    } catch (error: any) {
+      console.error("Error al procesar la venta:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo procesar la venta. Intente nuevamente.",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
+  };
+
+  if (loadingData) {
+    return <div className="p-6">Cargando datos...</div>;
   }
 
   return (
@@ -370,7 +461,7 @@ export default function NuevaVentaPage() {
                       <SelectValue placeholder="Selecciona un método de pago" />
                     </SelectTrigger>
                     <SelectContent>
-                      {metodosPago.map((metodo) => (
+                      {["Efectivo", "Tarjeta", "Transferencia"].map((metodo) => (
                         <SelectItem key={metodo} value={metodo}>
                           {metodo}
                         </SelectItem>
@@ -396,6 +487,5 @@ export default function NuevaVentaPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
-

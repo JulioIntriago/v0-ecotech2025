@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ArrowLeft } from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
 export default function NuevoProveedorPage() {
   const router = useRouter()
@@ -48,11 +50,52 @@ export default function NuevoProveedorPage() {
     setLoading(true)
 
     try {
-      console.log("Datos del proveedor:", formData)
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const { data: lastProveedor, error: fetchError } = await supabase
+        .from("proveedores")
+        .select("id")
+        .order("id", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (fetchError && fetchError.code !== "PGRST116") throw fetchError
+
+      let newIdNumber = 1
+      if (lastProveedor) {
+        const lastIdNumber = parseInt(lastProveedor.id.split("-")[1])
+        newIdNumber = lastIdNumber + 1
+      }
+      const newId = `PROV-${String(newIdNumber).padStart(3, "0")}`
+
+      const { error: insertError } = await supabase.from("proveedores").insert({
+        id: newId,
+        nombre: formData.nombre,
+        tipo: formData.tipo,
+        telefono: formData.telefono,
+        correo: formData.correo,
+        direccion: formData.direccion,
+        contacto_nombre: formData.contacto_nombre || null,
+        contacto_telefono: formData.contacto_telefono || null,
+        notas: formData.notas || null,
+        documento: formData.documento || null,
+        productos: 0, // Inicializar con 0 productos
+        ultima_compra: null, // Inicializar sin última compra
+        estado: "activo", // Estado inicial
+      })
+
+      if (insertError) throw insertError
+
+      toast({
+        title: "Proveedor creado",
+        description: "El proveedor ha sido creado exitosamente.",
+      })
+
       router.push("/dashboard/proveedores")
-    } catch (error) {
-      console.error("Error al crear el proveedor:", error)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "No se pudo crear el proveedor: " + error.message,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -90,7 +133,6 @@ export default function NuevoProveedorPage() {
                 />
               </div>
 
-              {/* Campo único para documento (RUC/Cédula) */}
               <div className="space-y-2">
                 <Label htmlFor="documento">RUC/Cédula</Label>
                 <Input
@@ -121,7 +163,6 @@ export default function NuevoProveedorPage() {
                 </Select>
               </div>
 
-              {/* Resto de los campos permanecen igual */}
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="telefono">Teléfono</Label>

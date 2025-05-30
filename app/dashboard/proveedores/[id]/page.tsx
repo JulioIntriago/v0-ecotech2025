@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,97 +9,85 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Building2, Calendar, Edit, Mail, MapPin, Package, Phone } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { supabase } from "@/lib/supabase"
 
-// Datos de ejemplo para el proveedor
-const proveedor = {
-  id: "PROV-001",
-  nombre: "TechParts Inc.",
-  tipo: "Repuestos",
-  telefono: "555-123-4567",
-  correo: "contacto@techparts.com",
-  direccion: "Calle Industrial 123, Ciudad",
-  contacto: "Juan Martínez",
-  ruc: "1234567890001",
-  productos: 15,
-  ultima_compra: "2023-05-10",
-  fecha_registro: "2023-01-15",
-  notas: "Proveedor principal de repuestos para dispositivos Apple. Ofrece descuentos por volumen de compra.",
+// Definir interfaces
+interface Proveedor {
+  id: string;
+  nombre: string;
+  tipo: string;
+  telefono: string;
+  correo: string;
+  direccion: string;
+  contacto_nombre?: string;
+  contacto_telefono?: string;
+  notas?: string;
+  documento?: string;
+  productos: number;
+  ultima_compra?: string | null;
+  estado: string;
+  created_at: string;
 }
 
-// Datos de ejemplo para productos del proveedor
-const productosProveedor = [
-  {
-    id: "PROD-001",
-    nombre: "Pantalla iPhone 12",
-    categoria: "Repuestos",
-    precio_compra: 80,
-    precio_venta: 120,
-    stock: 5,
-    ultima_compra: "2023-05-10",
-  },
-  {
-    id: "PROD-002",
-    nombre: "Batería iPhone 11",
-    categoria: "Repuestos",
-    precio_compra: 30,
-    precio_venta: 45,
-    stock: 8,
-    ultima_compra: "2023-05-05",
-  },
-  {
-    id: "PROD-003",
-    nombre: "Flex de Carga iPhone X",
-    categoria: "Repuestos",
-    precio_compra: 25,
-    precio_venta: 40,
-    stock: 6,
-    ultima_compra: "2023-04-28",
-  },
-  {
-    id: "PROD-004",
-    nombre: "Cámara Trasera iPhone 13",
-    categoria: "Repuestos",
-    precio_compra: 50,
-    precio_venta: 75,
-    stock: 4,
-    ultima_compra: "2023-05-12",
-  },
-]
+interface Producto {
+  id: string;
+  nombre: string;
+  categoria: string;
+  precio_compra: number;
+  precio_venta: number;
+  stock: number;
+  ultima_compra?: string;
+  proveedor_id: string;
+}
 
-// Datos de ejemplo para historial de compras
-const historialCompras = [
-  {
-    id: "COMP-001",
-    fecha: "2023-05-10",
-    total: 1200,
-    productos: 5,
-    estado: "Completada",
-  },
-  {
-    id: "COMP-002",
-    fecha: "2023-04-28",
-    total: 850,
-    productos: 3,
-    estado: "Completada",
-  },
-  {
-    id: "COMP-003",
-    fecha: "2023-04-15",
-    total: 1500,
-    productos: 7,
-    estado: "Completada",
-  },
-  {
-    id: "COMP-004",
-    fecha: "2023-03-22",
-    total: 950,
-    productos: 4,
-    estado: "Completada",
-  },
-]
+interface Compra {
+  id: string;
+  fecha: string;
+  total: number;
+  productos: number;
+  proveedor_id: string;
+  estado: string;
+}
 
 export default function DetalleProveedorPage({ params }: { params: { id: string } }) {
+  const [proveedor, setProveedor] = useState<Proveedor | null>(null)
+  const [productosProveedor, setProductosProveedor] = useState<Producto[]>([])
+  const [historialCompras, setHistorialCompras] = useState<Compra[]>([])
   const [activeTab, setActiveTab] = useState("informacion")
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: proveedorData, error: proveedorError } = await supabase
+        .from("proveedores")
+        .select("*")
+        .eq("id", params.id)
+        .single()
+      if (proveedorError) console.error("Error fetching proveedor:", proveedorError)
+      else setProveedor(proveedorData)
+
+      const { data: productosData, error: productosError } = await supabase
+        .from("productos")
+        .select("*")
+        .eq("proveedor_id", params.id)
+      if (productosError) console.error("Error fetching productos:", productosError)
+      else setProductosProveedor(productosData || [])
+
+      const { data: historialData, error: historialError } = await supabase
+        .from("compras")
+        .select("*")
+        .eq("proveedor_id", params.id)
+      if (historialError) console.error("Error fetching historial:", historialError)
+      else setHistorialCompras(historialData || [])
+
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [params.id])
+
+  if (loading) return <div>Cargando...</div>
+  if (!proveedor) return <div>Proveedor no encontrado</div>
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -149,9 +137,9 @@ export default function DetalleProveedorPage({ params }: { params: { id: string 
                             <span className="text-muted-foreground">Tipo:</span>
                             <span>{proveedor.tipo}</span>
                             <span className="text-muted-foreground">RUC:</span>
-                            <span>{proveedor.ruc}</span>
+                            <span>{proveedor.documento || "N/A"}</span>
                             <span className="text-muted-foreground">Contacto:</span>
-                            <span>{proveedor.contacto}</span>
+                            <span>{proveedor.contacto_nombre || "N/A"}</span>
                           </div>
                         </div>
                       </div>
@@ -191,9 +179,9 @@ export default function DetalleProveedorPage({ params }: { params: { id: string 
                           <h4 className="font-medium">Fechas</h4>
                           <div className="grid grid-cols-[140px_1fr] gap-1 text-sm">
                             <span className="text-muted-foreground">Registro:</span>
-                            <span>{new Date(proveedor.fecha_registro).toLocaleDateString()}</span>
+                            <span>{new Date(proveedor.created_at).toLocaleDateString()}</span>
                             <span className="text-muted-foreground">Última compra:</span>
-                            <span>{new Date(proveedor.ultima_compra).toLocaleDateString()}</span>
+                            <span>{proveedor.ultima_compra ? new Date(proveedor.ultima_compra).toLocaleDateString() : "N/A"}</span>
                           </div>
                         </div>
                       </div>
@@ -298,7 +286,7 @@ export default function DetalleProveedorPage({ params }: { params: { id: string 
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Última compra:</span>
-                <span className="font-medium">{new Date(proveedor.ultima_compra).toLocaleDateString()}</span>
+                <span className="font-medium">{proveedor.ultima_compra ? new Date(proveedor.ultima_compra).toLocaleDateString() : "N/A"}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Tipo:</span>

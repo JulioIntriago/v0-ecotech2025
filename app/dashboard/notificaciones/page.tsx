@@ -1,100 +1,129 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { Bell, CheckCircle, AlertCircle, Package, ClipboardList, ShoppingCart, Calendar } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { formatDistanceToNow } from "date-fns"
+import { es } from "date-fns/locale"
 
-// Datos de ejemplo para notificaciones
-const notificaciones = [
-  {
-    id: "NOT-001",
-    tipo: "alerta",
-    titulo: "Stock bajo de productos",
-    mensaje: "Hay 5 productos con stock bajo que requieren reposición.",
-    fecha: "2023-05-15 09:30",
-    leida: false,
-    accion: "/dashboard/inventario",
-    icono: Package,
-  },
-  {
-    id: "NOT-002",
-    tipo: "info",
-    titulo: "Nueva orden de trabajo",
-    mensaje: "Se ha registrado una nueva orden de trabajo: ORD-008.",
-    fecha: "2023-05-15 08:45",
-    leida: false,
-    accion: "/dashboard/ordenes/ORD-008",
-    icono: ClipboardList,
-  },
-  {
-    id: "NOT-003",
-    tipo: "exito",
-    titulo: "Venta completada",
-    mensaje: "Se ha completado la venta VTA-008 por $67.25.",
-    fecha: "2023-05-14 16:20",
-    leida: true,
-    accion: "/dashboard/ventas/VTA-008",
-    icono: ShoppingCart,
-  },
-  {
-    id: "NOT-004",
-    tipo: "info",
-    titulo: "Orden finalizada",
-    mensaje: "La orden ORD-003 ha sido marcada como finalizada.",
-    fecha: "2023-05-14 14:10",
-    leida: true,
-    accion: "/dashboard/ordenes/ORD-003",
-    icono: CheckCircle,
-  },
-  {
-    id: "NOT-005",
-    tipo: "alerta",
-    titulo: "Órdenes pendientes",
-    mensaje: "Hay 2 órdenes pendientes que requieren asignación de técnico.",
-    fecha: "2023-05-14 09:15",
-    leida: true,
-    accion: "/dashboard/ordenes",
-    icono: AlertCircle,
-  },
-  {
-    id: "NOT-006",
-    tipo: "info",
-    titulo: "Recordatorio de pago",
-    mensaje: "Recordatorio: El pago al proveedor TechParts Inc. vence mañana.",
-    fecha: "2023-05-13 15:30",
-    leida: true,
-    accion: "/dashboard/proveedores/PROV-001",
-    icono: Calendar,
-  },
-]
+// Mapa de iconos según el nombre almacenado en la base de datos
+const iconMap: { [key: string]: React.ComponentType<{ className?: string }> } = {
+  Package,
+  ClipboardList,
+  ShoppingCart,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+}
+
+// Definir la interfaz para Notificacion
+interface Notificacion {
+  id: string;
+  tipo: "alerta" | "info" | "exito";
+  titulo: string;
+  mensaje: string;
+  fecha: string;
+  leida: boolean;
+  accion: string;
+  icono: string;
+}
 
 export default function NotificacionesPage() {
-  const [notificacionesData, setNotificacionesData] = useState(notificaciones)
+  const [notificacionesData, setNotificacionesData] = useState<Notificacion[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Cargar notificaciones iniciales y suscribirse a cambios en tiempo real
+  useEffect(() => {
+    const fetchNotificaciones = async () => {
+      const { data, error } = await supabase
+        .from("notificaciones")
+        .select("*")
+        .order("fecha", { ascending: false })
+        .order("leida", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching notificaciones:", error)
+      } else {
+        setNotificacionesData(data || [])
+      }
+      setLoading(false)
+    }
+
+    fetchNotificaciones()
+
+    // Suscripción a cambios en tiempo real
+    const subscription = supabase
+      .channel("notificaciones")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notificaciones" },
+        (payload) => {
+          setNotificacionesData((prev) => [payload.new as Notificacion, ...prev])
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notificaciones" },
+        (payload) => {
+          setNotificacionesData((prev) =>
+            prev.map((n) => (n.id === payload.new.id ? payload.new as Notificacion : n)),
+          )
+        },
+      )
+      .subscribe()
+
+    // Limpieza de la suscripción al desmontar el componente
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   // Marcar todas como leídas
-  const marcarTodasLeidas = () => {
-    setNotificacionesData(
-      notificacionesData.map((notificacion) => ({
-        ...notificacion,
-        leida: true,
-      })),
-    )
+  const marcarTodasLeidas = async () => {
+    const { error } = await supabase
+      .from("notificaciones")
+      .update({ leida: true })
+      .eq("leida", false)
+
+    if (error) {
+      console.error("Error marking all as read:", error)
+    } else {
+      setNotificacionesData(
+        notificacionesData.map((notificacion) => ({
+          ...notificacion,
+          leida: true,
+        })),
+      )
+    }
   }
 
   // Marcar una notificación como leída
-  const marcarLeida = (id: string) => {
-    setNotificacionesData(
-      notificacionesData.map((notificacion) =>
-        notificacion.id === id ? { ...notificacion, leida: true } : notificacion,
-      ),
-    )
+  const marcarLeida = async (id: string) => {
+    const { error } = await supabase
+      .from("notificaciones")
+      .update({ leida: true })
+      .eq("id", id)
+
+    if (error) {
+      console.error("Error marking as read:", error)
+    } else {
+      setNotificacionesData(
+        notificacionesData.map((notificacion) =>
+          notificacion.id === id ? { ...notificacion, leida: true } : notificacion,
+        ),
+      )
+    }
   }
 
   // Contar notificaciones no leídas
   const noLeidas = notificacionesData.filter((n) => !n.leida).length
+
+  if (loading) return <div>Cargando...</div>
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -132,13 +161,14 @@ export default function NotificacionesPage() {
               </div>
             ) : (
               notificacionesData.map((notificacion) => {
-                // Determinar el color del icono según el tipo
                 const iconColor =
                   notificacion.tipo === "alerta"
                     ? "text-destructive"
                     : notificacion.tipo === "exito"
                       ? "text-success"
                       : "text-primary"
+
+                const IconComponent = iconMap[notificacion.icono]
 
                 return (
                   <div
@@ -148,12 +178,14 @@ export default function NotificacionesPage() {
                     }`}
                   >
                     <div className={`mt-1 ${iconColor}`}>
-                      <notificacion.icono className="h-5 w-5" />
+                      {IconComponent ? <IconComponent className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
                     </div>
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium">{notificacion.titulo}</h4>
-                        <span className="text-xs text-muted-foreground">{notificacion.fecha}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(notificacion.fecha), { addSuffix: true, locale: es })}
+                        </span>
                       </div>
                       <p className="text-sm text-muted-foreground">{notificacion.mensaje}</p>
                     </div>
@@ -164,7 +196,7 @@ export default function NotificacionesPage() {
                         </Button>
                       )}
                       <Button variant="outline" size="sm" asChild>
-                        <a href={notificacion.accion}>Ver detalles</a>
+                        <Link href={notificacion.accion}>Ver detalles</Link>
                       </Button>
                     </div>
                   </div>
@@ -177,4 +209,3 @@ export default function NotificacionesPage() {
     </div>
   )
 }
-

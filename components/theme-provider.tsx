@@ -1,82 +1,44 @@
 "use client"
 
-import type React from "react"
+import { ThemeProvider as NextThemesProvider, useTheme as useNextTheme } from "next-themes";
+import type React from "react";
 
-import { createContext, useContext, useEffect, useState } from "react"
-
-type Theme = "dark" | "light" | "system"
+// Definimos los valores posibles para `attribute` según lo que soporta `next-themes`
+type ThemeAttribute = "class" | "data-theme";
 
 type ThemeProviderProps = {
-  children: React.ReactNode
-  defaultTheme?: Theme
-}
+  children: React.ReactNode;
+  defaultTheme?: "dark" | "light" | "system";
+  attribute?: ThemeAttribute; // Restringimos los valores posibles
+  enableSystem?: boolean;
+  disableTransitionOnChange?: boolean;
+};
 
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-}
-
-const initialState: ThemeProviderState = {
-  theme: "system",
-  setTheme: () => null,
-}
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
-
-export function ThemeProvider({ children, defaultTheme = "system", ...props }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
-
-  useEffect(() => {
-    const root = window.document.documentElement
-    root.classList.remove("light", "dark")
-
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-      root.classList.add(systemTheme)
-      return
-    }
-
-    root.classList.add(theme)
-  }, [theme])
-
-  // Escuchar cambios en la preferencia del sistema
-  useEffect(() => {
-    if (theme !== "system") return
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-
-    const handleChange = () => {
-      const root = window.document.documentElement
-      root.classList.remove("light", "dark")
-      root.classList.add(mediaQuery.matches ? "dark" : "light")
-    }
-
-    mediaQuery.addEventListener("change", handleChange)
-    return () => mediaQuery.removeEventListener("change", handleChange)
-  }, [theme])
-
-  const value = {
-    theme,
-    setTheme: (theme: Theme) => {
-      setTheme(theme)
-      // Guardar preferencia en localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem("theme", theme)
-      }
-    },
-  }
-
+export function ThemeProvider({
+  children,
+  defaultTheme = "system",
+  attribute = "class",
+  enableSystem = true,
+  disableTransitionOnChange = false,
+  ...props
+}: ThemeProviderProps) {
   return (
-    <ThemeProviderContext.Provider {...props} value={value}>
+    <NextThemesProvider
+      attribute={attribute}
+      defaultTheme={defaultTheme}
+      enableSystem={enableSystem}
+      disableTransitionOnChange={disableTransitionOnChange}
+      {...props}
+    >
       {children}
-    </ThemeProviderContext.Provider>
-  )
+    </NextThemesProvider>
+  );
 }
 
 export const useTheme = () => {
-  const context = useContext(ThemeProviderContext)
-
-  if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider")
-
-  return context
-}
+  const { theme, setTheme } = useNextTheme();
+  return {
+    theme: theme as "dark" | "light" | "system",
+    setTheme: setTheme as (theme: "dark" | "light" | "system") => void,
+  };
+};

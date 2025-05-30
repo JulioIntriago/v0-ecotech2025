@@ -1,102 +1,107 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Phone, Mail } from "lucide-react"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search, Phone, Mail } from "lucide-react";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { supabase } from "@/lib/supabase";
 
-// Datos de ejemplo para clientes
-const clientes = [
-  {
-    id: "CLI-001",
-    nombre: "Juan Pérez",
-    telefono: "555-123-4567",
-    correo: "juan.perez@example.com",
-    ordenes_activas: 2,
-    total_gastado: 245.99,
-    ultima_visita: "2023-05-15",
-  },
-  {
-    id: "CLI-002",
-    nombre: "María López",
-    telefono: "555-987-6543",
-    correo: "maria.lopez@example.com",
-    ordenes_activas: 1,
-    total_gastado: 78.5,
-    ultima_visita: "2023-05-14",
-  },
-  {
-    id: "CLI-003",
-    nombre: "Carlos Ruiz",
-    telefono: "555-456-7890",
-    correo: "carlos.ruiz@example.com",
-    ordenes_activas: 0,
-    total_gastado: 350.75,
-    ultima_visita: "2023-05-10",
-  },
-  {
-    id: "CLI-004",
-    nombre: "Ana Gómez",
-    telefono: "555-234-5678",
-    correo: "ana.gomez@example.com",
-    ordenes_activas: 1,
-    total_gastado: 120.0,
-    ultima_visita: "2023-05-12",
-  },
-  {
-    id: "CLI-005",
-    nombre: "Pedro Sánchez",
-    telefono: "555-876-5432",
-    correo: "pedro.sanchez@example.com",
-    ordenes_activas: 0,
-    total_gastado: 55.75,
-    ultima_visita: "2023-05-08",
-  },
-  {
-    id: "CLI-006",
-    nombre: "Lucía Martínez",
-    telefono: "555-345-6789",
-    correo: "lucia.martinez@example.com",
-    ordenes_activas: 1,
-    total_gastado: 189.99,
-    ultima_visita: "2023-05-13",
-  },
-  {
-    id: "CLI-007",
-    nombre: "Roberto Díaz",
-    telefono: "555-654-3210",
-    correo: "roberto.diaz@example.com",
-    ordenes_activas: 0,
-    total_gastado: 42.5,
-    ultima_visita: "2023-05-05",
-  },
-  {
-    id: "CLI-008",
-    nombre: "Elena Torres",
-    telefono: "555-765-4321",
-    correo: "elena.torres@example.com",
-    ordenes_activas: 2,
-    total_gastado: 267.25,
-    ultima_visita: "2023-05-14",
-  },
-]
+interface Cliente {
+  id: string;
+  nombre: string;
+  cedula: string;
+  telefono: string;
+  correo: string;
+  ultima_visita: string;
+  ordenes_activas: number;
+  total_gastado: number;
+}
 
 export default function ClientesPage() {
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Filtrar clientes según búsqueda
+  useEffect(() => {
+    const fetchClientes = async () => {
+      try {
+        const { data: clientesData, error: clientesError } = await supabase
+          .from("clientes")
+          .select("id, nombre, cedula, telefono, correo");
+
+        if (clientesError) throw clientesError;
+
+        const clientesConDatos = await Promise.all(
+          (clientesData || []).map(async (cliente) => {
+            const { data: ordenesData, error: ordenesError } = await supabase
+              .from("ordenes")
+              .select("id")
+              .eq("cliente_id", cliente.id)
+              .in("estado", ["pendiente", "en_proceso"]);
+
+            if (ordenesError) throw ordenesError;
+
+            const { data: ventasData, error: ventasError } = await supabase
+              .from("ventas")
+              .select("total")
+              .eq("cliente_id", cliente.id);
+
+            if (ventasError) throw ventasError;
+
+            const { data: ultimaOrden, error: ultimaOrdenError } = await supabase
+              .from("ordenes")
+              .select("created_at")
+              .eq("cliente_id", cliente.id)
+              .order("created_at", { ascending: false })
+              .limit(1);
+
+            const { data: ultimaCompra, error: ultimaCompraError } = await supabase
+              .from("ventas")
+              .select("created_at")
+              .eq("cliente_id", cliente.id)
+              .order("created_at", { ascending: false })
+              .limit(1);
+
+            if (ultimaOrdenError || ultimaCompraError) throw ultimaOrdenError || ultimaCompraError;
+
+            const ultimaVisita =
+              ultimaOrden?.[0]?.created_at || ultimaCompra?.[0]?.created_at || "No disponible";
+
+            return {
+              ...cliente,
+              ordenes_activas: ordenesData?.length || 0,
+              total_gastado: ventasData?.reduce((sum, venta) => sum + (venta.total || 0), 0) || 0,
+              ultima_visita: ultimaVisita,
+            };
+          })
+        );
+
+        setClientes(clientesConDatos);
+      } catch (error) {
+        console.error("Error fetching clients:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClientes();
+  }, []);
+
   const clientesFiltrados = clientes.filter(
     (cliente) =>
       cliente.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cliente.cedula.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cliente.telefono.includes(searchQuery) ||
       cliente.correo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cliente.id.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+      cliente.id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (loading) return <div className="p-6">Cargando clientes...</div>;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -116,7 +121,7 @@ export default function ClientesPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar por nombre, teléfono, correo o ID..."
+            placeholder="Buscar por nombre, cédula, teléfono, correo o ID..."
             className="w-full pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -134,6 +139,7 @@ export default function ClientesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
+                <TableHead className="hidden md:table-cell">Cédula</TableHead>
                 <TableHead className="hidden md:table-cell">Contacto</TableHead>
                 <TableHead className="hidden lg:table-cell">Última Visita</TableHead>
                 <TableHead className="text-center">Órdenes Activas</TableHead>
@@ -144,7 +150,7 @@ export default function ClientesPage() {
             <TableBody>
               {clientesFiltrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     No se encontraron clientes que coincidan con los criterios de búsqueda.
                   </TableCell>
                 </TableRow>
@@ -155,6 +161,7 @@ export default function ClientesPage() {
                       <div className="font-medium">{cliente.nombre}</div>
                       <div className="text-sm text-muted-foreground">{cliente.id}</div>
                     </TableCell>
+                    <TableCell className="hidden md:table-cell">{cliente.cedula}</TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="flex flex-col">
                         <div className="flex items-center">
@@ -191,6 +198,5 @@ export default function ClientesPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

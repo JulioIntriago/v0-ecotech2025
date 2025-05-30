@@ -1,145 +1,117 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Search } from "lucide-react"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search } from "lucide-react";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { supabase } from "@/lib/supabase";
 
-// Datos de ejemplo para productos
-const productos = [
-  {
-    id: "PROD-001",
-    nombre: "Pantalla iPhone 12",
-    categoria: "Repuestos",
-    precio: 120,
-    cantidad: 5,
-    proveedor: "TechParts Inc.",
-  },
-  {
-    id: "PROD-002",
-    nombre: "Batería Samsung S21",
-    categoria: "Repuestos",
-    precio: 45,
-    cantidad: 8,
-    proveedor: "BatteryPlus",
-  },
-  {
-    id: "PROD-003",
-    nombre: "Cargador USB-C",
-    categoria: "Accesorios",
-    precio: 15,
-    cantidad: 2,
-    proveedor: "ElectroSupply",
-  },
-  {
-    id: "PROD-004",
-    nombre: "Protector Pantalla iPhone 13",
-    categoria: "Accesorios",
-    precio: 10,
-    cantidad: 25,
-    proveedor: "ScreenGuard",
-  },
-  {
-    id: "PROD-005",
-    nombre: "Funda iPhone 12",
-    categoria: "Accesorios",
-    precio: 18,
-    cantidad: 3,
-    proveedor: "CaseMakers",
-  },
-  {
-    id: "PROD-006",
-    nombre: "Cable Lightning 2m",
-    categoria: "Cables",
-    precio: 12,
-    cantidad: 15,
-    proveedor: "ElectroSupply",
-  },
-  {
-    id: "PROD-007",
-    nombre: "Auriculares Bluetooth",
-    categoria: "Audio",
-    precio: 35,
-    cantidad: 7,
-    proveedor: "SoundTech",
-  },
-  {
-    id: "PROD-008",
-    nombre: "Batería Externa 10000mAh",
-    categoria: "Baterías",
-    precio: 25,
-    cantidad: 10,
-    proveedor: "PowerBank Co.",
-  },
-  {
-    id: "PROD-009",
-    nombre: "Pantalla Xiaomi Redmi Note 10",
-    categoria: "Repuestos",
-    precio: 85,
-    cantidad: 4,
-    proveedor: "TechParts Inc.",
-  },
-  {
-    id: "PROD-010",
-    nombre: "Micrófono Samsung S20",
-    categoria: "Repuestos",
-    precio: 22,
-    cantidad: 0,
-    proveedor: "MicroTech",
-  },
-]
-
-// Categorías disponibles
-const categorias = ["Todas", "Repuestos", "Accesorios", "Cables", "Audio", "Baterías"]
-
-// Función para determinar el estado del stock
-function getEstadoStock(cantidad: number) {
-  if (cantidad === 0) return "agotado"
-  if (cantidad <= 3) return "bajo"
-  return "normal"
+interface Categoria {
+  nombre: string;
 }
 
-// Función para obtener la variante del badge según el estado del stock
-function getVariantForStock(estado: string) {
-  const variantes: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    normal: "default",
-    bajo: "secondary",
-    agotado: "destructive",
-  }
-  return variantes[estado] || "default"
+interface Proveedor {
+  nombre: string;
 }
 
-// Función para traducir el estado del stock
-function traducirEstadoStock(estado: string) {
-  const traducciones: Record<string, string> = {
-    normal: "En Stock",
-    bajo: "Stock Bajo",
-    agotado: "Agotado",
-  }
-  return traducciones[estado] || estado
+interface Producto {
+  id: string;
+  nombre: string;
+  precio: number;
+  precio_compra: number;
+  cantidad: number;
+  stock_minimo: number;
+  ubicacion: string;
+  categoria: Categoria;
+  proveedor: Proveedor;
 }
 
 export default function InventarioPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filtroCategoria, setFiltroCategoria] = useState("Todas")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("Todas");
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Filtrar productos según búsqueda y categoría
+  useEffect(() => {
+    const fetchProductos = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("inventario")
+          .select(`
+            id,
+            nombre,
+            precio,
+            precio_compra,
+            cantidad,
+            stock_minimo,
+            ubicacion,
+            categoria:categorias_productos!inner(nombre),
+            proveedor:proveedores!inner(nombre)
+          `);
+
+        if (error) throw error;
+
+        // Asegurarse de que categoria y proveedor sean objetos únicos
+        const processedData = data.map((item) => ({
+          ...item,
+          categoria: item.categoria?.[0] || { nombre: "Sin categoría" },
+          proveedor: item.proveedor?.[0] || { nombre: "Sin proveedor" },
+        }));
+        setProductos(processedData);
+      } catch (error) {
+        console.error("Error fetching products:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProductos();
+  }, []);
+
+  const categorias = ["Todas", ...new Set(productos.map((p) => p.categoria.nombre))];
+
+  function getEstadoStock(cantidad: number, stockMinimo: number) {
+    if (cantidad === 0) return "agotado";
+    if (cantidad <= stockMinimo) return "bajo";
+    return "normal";
+  }
+
+  function getVariantForStock(estado: "normal" | "bajo" | "agotado"): "default" | "secondary" | "destructive" {
+    const variantes: Record<"normal" | "bajo" | "agotado", "default" | "secondary" | "destructive"> = {
+      normal: "default",
+      bajo: "secondary",
+      agotado: "destructive",
+    };
+    return variantes[estado];
+  }
+
+  function traducirEstadoStock(estado: "normal" | "bajo" | "agotado"): string {
+    const traducciones: Record<"normal" | "bajo" | "agotado", string> = {
+      normal: "En Stock",
+      bajo: "Stock Bajo",
+      agotado: "Agotado",
+    };
+    return traducciones[estado];
+  }
+
   const productosFiltrados = productos.filter((producto) => {
     const matchesSearch =
       producto.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       producto.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      producto.proveedor.toLowerCase().includes(searchQuery.toLowerCase())
+      (producto.proveedor?.nombre || "").toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategoria = filtroCategoria === "Todas" || producto.categoria === filtroCategoria
+    const matchesCategoria = filtroCategoria === "Todas" || producto.categoria.nombre === filtroCategoria;
 
-    return matchesSearch && matchesCategoria
-  })
+    return matchesSearch && matchesCategoria;
+  });
+
+  if (loading) return <div className="p-6">Cargando inventario...</div>;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -206,12 +178,12 @@ export default function InventarioPage() {
                 </TableRow>
               ) : (
                 productosFiltrados.map((producto) => {
-                  const estadoStock = getEstadoStock(producto.cantidad)
+                  const estadoStock = getEstadoStock(producto.cantidad, producto.stock_minimo || 0);
                   return (
                     <TableRow key={producto.id}>
                       <TableCell className="font-medium">{producto.id}</TableCell>
                       <TableCell>{producto.nombre}</TableCell>
-                      <TableCell className="hidden md:table-cell">{producto.categoria}</TableCell>
+                      <TableCell className="hidden md:table-cell">{producto.categoria.nombre}</TableCell>
                       <TableCell className="text-right">${producto.precio.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -219,14 +191,14 @@ export default function InventarioPage() {
                           <Badge variant={getVariantForStock(estadoStock)}>{traducirEstadoStock(estadoStock)}</Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell">{producto.proveedor}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{producto.proveedor?.nombre || "Sin proveedor"}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/dashboard/inventario/${producto.id}`}>Ver detalles</Link>
                         </Button>
                       </TableCell>
                     </TableRow>
-                  )
+                  );
                 })
               )}
             </TableBody>
@@ -234,6 +206,5 @@ export default function InventarioPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

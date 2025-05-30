@@ -1,121 +1,116 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { ArrowLeft, Edit, Mail, Phone, MapPin, Trash } from "lucide-react"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ArrowLeft, Edit, Mail, Phone, MapPin, Trash } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
 
-// Datos de ejemplo para el cliente
-const cliente = {
-  id: "CLI-001",
-  nombre: "Juan Pérez",
-  telefono: "555-123-4567",
-  correo: "juan.perez@example.com",
-  direccion: "Calle Principal 123, Ciudad",
-  notas: "Cliente frecuente. Prefiere ser contactado por teléfono.",
-  fecha_registro: "2023-01-15",
-  ordenes: [
-    {
-      id: "ORD-001",
-      dispositivo: "iPhone 12",
-      problema: "Pantalla rota",
-      estado: "en_proceso",
-      fecha_ingreso: "2023-05-15",
-      costo_estimado: 120,
-    },
-    {
-      id: "ORD-005",
-      dispositivo: "iPhone 11",
-      problema: "Cámara",
-      estado: "en_proceso",
-      fecha_ingreso: "2023-05-11",
-      costo_estimado: 60,
-    },
-    {
-      id: "ORD-003",
-      dispositivo: "Xiaomi Mi 11",
-      problema: "No enciende",
-      estado: "finalizado",
-      fecha_ingreso: "2023-04-20",
-      costo_estimado: 80,
-    },
-  ],
-  compras: [
-    {
-      id: "VTA-001",
-      fecha: "2023-05-15",
-      total: 145.99,
-      metodo_pago: "Efectivo",
-      productos: [
-        { nombre: "Cargador USB-C", cantidad: 1, precio: 15.99 },
-        { nombre: "Funda iPhone 12", cantidad: 1, precio: 25.0 },
-        { nombre: "Pantalla iPhone 12", cantidad: 1, precio: 105.0 },
-      ],
-    },
-    {
-      id: "VTA-003",
-      fecha: "2023-04-22",
-      total: 35.99,
-      metodo_pago: "Tarjeta",
-      productos: [
-        { nombre: "Protector Pantalla", cantidad: 2, precio: 10.0 },
-        { nombre: "Cable Lightning 2m", cantidad: 1, precio: 15.99 },
-      ],
-    },
-  ],
+interface Cliente {
+  id: string;
+  nombre: string;
+  cedula: string;
+  telefono: string;
+  correo: string;
+  direccion: string;
+  notas: string;
+  fecha_registro: string;
+  ordenes: any[];
+  compras: any[];
 }
 
-// Función para traducir el estado
-function traducirEstado(estado: string) {
+function traducirEstado(estado: string): string {
   const traducciones: Record<string, string> = {
     pendiente: "Pendiente",
     en_proceso: "En Proceso",
     finalizado: "Finalizado",
     entregado: "Entregado",
-  }
-  return traducciones[estado] || estado
+  };
+  return traducciones[estado] || estado;
 }
 
-// Función para determinar la variante del badge según el estado
 function getVariantForEstado(estado: string) {
   const variantes: Record<string, "default" | "secondary" | "success" | "outline"> = {
     pendiente: "secondary",
     en_proceso: "default",
     finalizado: "success",
     entregado: "outline",
-  }
-  return variantes[estado] || "default"
+  };
+  return variantes[estado] || "default";
 }
 
 export default function DetalleClientePage({ params }: { params: { id: string } }) {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [cliente, setCliente] = useState<Cliente | null>(null);
+
+  useEffect(() => {
+    const fetchCliente = async () => {
+      try {
+        const { data: clienteData, error: clienteError } = await supabase
+          .from("clientes")
+          .select("*")
+          .eq("id", params.id)
+          .single();
+
+        if (clienteError) throw clienteError;
+
+        const { data: ordenesData, error: ordenesError } = await supabase
+          .from("ordenes")
+          .select("id, dispositivo, problema, estado, fecha_ingreso, costo_estimado")
+          .eq("cliente_id", params.id);
+
+        if (ordenesError) throw ordenesError;
+
+        const { data: comprasData, error: comprasError } = await supabase
+          .from("ventas")
+          .select("id, fecha, total, metodo_pago, productos")
+          .eq("cliente_id", params.id);
+
+        if (comprasError) throw comprasError;
+
+        setCliente({
+          ...clienteData,
+          ordenes: ordenesData || [],
+          compras: comprasData || [],
+        });
+      } catch (error) {
+        console.error("Error fetching client:", error);
+        toast({ title: "Error", description: "No se pudo cargar el cliente.", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCliente();
+  }, [params.id]);
 
   const handleEliminarCliente = async () => {
     if (confirm("¿Estás seguro de que deseas eliminar este cliente? Esta acción no se puede deshacer.")) {
-      setLoading(true)
-
+      setLoading(true);
       try {
-        // Aquí iría la lógica para eliminar en Supabase
-        console.log("Eliminar cliente:", params.id)
-
-        // Simular tiempo de carga
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        router.push("/dashboard/clientes")
+        const { error } = await supabase.from("clientes").delete().eq("id", params.id);
+        if (error) throw error;
+        router.push("/dashboard/clientes");
+        toast({ title: "Éxito", description: "Cliente eliminado correctamente." });
       } catch (error) {
-        console.error("Error al eliminar el cliente:", error)
+        console.error("Error al eliminar el cliente:", error);
+        toast({ title: "Error", description: "No se pudo eliminar el cliente.", variant: "destructive" });
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
-  }
+  };
+
+  if (loading) return <div className="p-6">Cargando cliente...</div>;
+  if (!cliente) return <div className="p-6">Cliente no encontrado.</div>;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -158,6 +153,10 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
             <CardContent>
               <dl className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
+                  <dt className="text-sm font-medium text-muted-foreground">Cédula</dt>
+                  <dd>{cliente.cedula}</dd>
+                </div>
+                <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Teléfono</dt>
                   <dd className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-muted-foreground" />
@@ -168,14 +167,14 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
                   <dt className="text-sm font-medium text-muted-foreground">Correo Electrónico</dt>
                   <dd className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{cliente.correo}</span>
+                    <span>{cliente.correo || "No disponible"}</span>
                   </dd>
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <dt className="text-sm font-medium text-muted-foreground">Dirección</dt>
                   <dd className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{cliente.direccion}</span>
+                    <span>{cliente.direccion || "No disponible"}</span>
                   </dd>
                 </div>
               </dl>
@@ -219,7 +218,7 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Total Gastado</dt>
                   <dd className="text-2xl font-bold">
-                    ${cliente.compras.reduce((sum, compra) => sum + compra.total, 0).toFixed(2)}
+                    ${cliente.compras.reduce((sum, compra) => sum + (compra.total || 0), 0).toFixed(2)}
                   </dd>
                 </div>
               </dl>
@@ -266,7 +265,7 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
                           <Badge variant={getVariantForEstado(orden.estado)}>{traducirEstado(orden.estado)}</Badge>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{orden.fecha_ingreso}</TableCell>
-                        <TableCell className="text-right">${orden.costo_estimado.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">${(orden.costo_estimado || 0).toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -303,7 +302,7 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
                           <div className="text-sm text-muted-foreground">Método de pago: {compra.metodo_pago}</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-lg font-bold">${compra.total.toFixed(2)}</div>
+                          <div className="text-lg font-bold">${(compra.total || 0).toFixed(2)}</div>
                         </div>
                       </div>
                       <div className="p-4">
@@ -316,11 +315,11 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {compra.productos.map((producto, index) => (
+                            {(compra.productos || []).map((producto: any, index: number) => (
                               <TableRow key={index}>
                                 <TableCell>{producto.nombre}</TableCell>
                                 <TableCell className="text-center">{producto.cantidad}</TableCell>
-                                <TableCell className="text-right">${producto.precio.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">${(producto.precio || 0).toFixed(2)}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -335,6 +334,5 @@ export default function DetalleClientePage({ params }: { params: { id: string } 
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
-

@@ -1,140 +1,195 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { ArrowLeft, Edit, Trash, BarChart, TrendingUp, TrendingDown } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ArrowLeft, Edit, Trash, BarChart, TrendingUp, TrendingDown } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";
 
-// Datos de ejemplo para el producto
-const productoEjemplo = {
-  id: "PROD-001",
-  nombre: "Pantalla iPhone 12",
-  categoria: "Repuestos",
-  descripcion: "Pantalla de reemplazo original para iPhone 12, incluye digitalizador y marco.",
-  precio_compra: 80.0,
-  precio_venta: 120.0,
-  cantidad: 5,
-  stock_minimo: 3,
-  ubicacion: "Estante A-12",
-  proveedor: {
-    id: "PROV-001",
-    nombre: "TechParts Inc.",
-    telefono: "555-123-4567",
-    correo: "contacto@techparts.com",
-  },
-  movimientos: [
-    {
-      id: "MOV-001",
-      tipo: "entrada",
-      cantidad: 10,
-      fecha: "2023-05-01",
-      referencia: "Compra #C-2023-05-01",
-      usuario: "Admin",
-    },
-    {
-      id: "MOV-002",
-      tipo: "salida",
-      cantidad: 2,
-      fecha: "2023-05-05",
-      referencia: "Venta #VTA-002",
-      usuario: "Ana Gómez",
-    },
-    {
-      id: "MOV-003",
-      tipo: "salida",
-      cantidad: 3,
-      fecha: "2023-05-10",
-      referencia: "Venta #VTA-005",
-      usuario: "Ana Gómez",
-    },
-  ],
-  ventas_recientes: [
-    {
-      id: "VTA-002",
-      fecha: "2023-05-05",
-      cliente: "María López",
-      cantidad: 2,
-      precio: 120.0,
-    },
-    {
-      id: "VTA-005",
-      fecha: "2023-05-10",
-      cliente: "Pedro Sánchez",
-      cantidad: 3,
-      precio: 120.0,
-    },
-  ],
+interface Categoria {
+  nombre: string;
 }
 
-// Función para determinar el estado del stock
-function getEstadoStock(cantidad: number, stockMinimo: number) {
-  if (cantidad === 0) return "agotado"
-  if (cantidad <= stockMinimo) return "bajo"
-  return "normal"
+interface Proveedor {
+  id: string;
+  nombre: string;
+  telefono: string;
+  correo: string;
 }
 
-// Función para obtener la variante del badge según el estado del stock
-function getVariantForStock(estado: string) {
-  const variantes: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    normal: "default",
-    bajo: "secondary",
-    agotado: "destructive",
-  }
-  return variantes[estado] || "default"
+interface Movimiento {
+  id: string;
+  tipo: string;
+  cantidad: number;
+  fecha: string;
+  referencia: string;
+  usuario: string;
 }
 
-// Función para traducir el estado del stock
-function traducirEstadoStock(estado: string) {
-  const traducciones: Record<string, string> = {
-    normal: "En Stock",
-    bajo: "Stock Bajo",
-    agotado: "Agotado",
-  }
-  return traducciones[estado] || estado
+interface VentaReciente {
+  id: string;
+  fecha: string;
+  cliente: string;
+  cantidad: number;
+  precio: number;
 }
 
-export default function DetalleProductoPage({ params }: { params: { id: string } }) {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
+interface Producto {
+  id: string;
+  nombre: string;
+  categoria: Categoria;
+  descripcion: string;
+  precio_compra: number;
+  precio_venta: number;
+  cantidad: number;
+  stock_minimo: number;
+  ubicacion: string;
+  proveedor: Proveedor;
+  movimientos: Movimiento[];
+  ventas_recientes: VentaReciente[];
+}
 
-  // En una implementación real, cargaríamos el producto desde la base de datos
-  const producto = productoEjemplo
+export default function DetalleProductoPage({ params }: { params: { id?: string } }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [producto, setProducto] = useState<Producto | null>(null);
+
+  useEffect(() => {
+    // Verificar que params.id esté definido
+    if (!params.id) {
+      console.error("ID de producto no proporcionado");
+      toast({ title: "Error", description: "ID de producto no válido.", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    const fetchProducto = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("inventario")
+          .select(`
+            id,
+            nombre,
+            descripcion,
+            precio,
+            precio_compra,
+            cantidad,
+            stock_minimo,
+            ubicacion,
+            categoria:categorias_productos!inner(nombre),
+            proveedor:proveedores!inner(id, nombre, telefono, correo),
+            movimientos:movimientos_inventario(
+              id,
+              tipo,
+              cantidad,
+              fecha,
+              referencia,
+              usuario_id
+            ),
+            ventas_recientes:productos_venta(
+              id,
+              venta_id,
+              cantidad,
+              precio_final,
+              ventas!inner(id, fecha_venta, cliente_nombre)
+            )
+          `)
+          .eq("id", params.id)
+          .single();
+
+        if (error) throw error;
+
+        setProducto({
+          id: data.id,
+          nombre: data.nombre,
+          categoria: data.categoria?.[0] || { nombre: "Sin categoría" },
+          descripcion: data.descripcion || "",
+          precio_compra: data.precio_compra || 0,
+          precio_venta: data.precio || 0,
+          cantidad: data.cantidad || 0,
+          stock_minimo: data.stock_minimo || 0,
+          ubicacion: data.ubicacion || "",
+          proveedor: data.proveedor?.[0] || { id: "", nombre: "Sin proveedor", telefono: "", correo: "" },
+          movimientos: data.movimientos?.map((m: any) => ({
+            id: m.id,
+            tipo: m.tipo,
+            cantidad: m.cantidad,
+            fecha: m.fecha,
+            referencia: m.referencia || "Sin referencia",
+            usuario: m.usuario_id || "Sistema",
+          })) || [],
+          ventas_recientes: data.ventas_recientes?.map((v: any) => ({
+            id: v.venta_id,
+            fecha: v.ventas?.[0]?.fecha_venta || "",
+            cliente: v.ventas?.[0]?.cliente_nombre || "Desconocido",
+            cantidad: v.cantidad,
+            precio: v.precio_final || 0,
+          })) || [],
+        });
+      } catch (error: any) {
+        console.error("Error fetching product:", error);
+        toast({ title: "Error", description: `No se pudo cargar el producto: ${error.message}`, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducto();
+  }, [params.id]);
 
   const handleDelete = async () => {
-    if (!confirm("¿Estás seguro de que deseas eliminar este producto?")) return
+    if (!confirm("¿Estás seguro de que deseas eliminar este producto?")) return;
 
-    setLoading(true)
-
+    setLoading(true);
     try {
-      // Simulación de eliminación
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const { error } = await supabase.from("inventario").delete().eq("id", params.id);
+      if (error) throw error;
 
-      toast({
-        title: "Producto eliminado",
-        description: "El producto ha sido eliminado correctamente.",
-      })
-
-      router.push("/dashboard/inventario")
+      toast({ title: "Producto eliminado", description: "El producto ha sido eliminado correctamente." });
+      router.push("/dashboard/inventario");
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el producto.",
-        variant: "destructive",
-      })
+      console.error("Error al eliminar el producto:", error);
+      toast({ title: "Error", description: "No se pudo eliminar el producto.", variant: "destructive" });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
+  };
+
+  if (loading) return <div className="p-6">Cargando producto...</div>;
+  if (!producto) return <div className="p-6">Producto no encontrado.</div>;
+
+  const estadoStock = getEstadoStock(producto.cantidad, producto.stock_minimo);
+  const estadoVariante = getVariantForStock(estadoStock);
+
+  function getEstadoStock(cantidad: number, stockMinimo: number) {
+    if (cantidad === 0) return "agotado";
+    if (cantidad <= stockMinimo) return "bajo";
+    return "normal";
   }
 
-  // Calcular el estado del stock
-  const estadoStock = getEstadoStock(producto.cantidad, producto.stock_minimo)
-  const estadoVariante = getVariantForStock(estadoStock)
+  function getVariantForStock(estado: "normal" | "bajo" | "agotado"): "default" | "secondary" | "destructive" {
+    const variantes: Record<"normal" | "bajo" | "agotado", "default" | "secondary" | "destructive"> = {
+      normal: "default",
+      bajo: "secondary",
+      agotado: "destructive",
+    };
+    return variantes[estado];
+  }
+
+  function traducirEstadoStock(estado: "normal" | "bajo" | "agotado"): string {
+    const traducciones: Record<"normal" | "bajo" | "agotado", string> = {
+      normal: "En Stock",
+      bajo: "Stock Bajo",
+      agotado: "Agotado",
+    };
+    return traducciones[estado];
+  }
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -181,7 +236,7 @@ export default function DetalleProductoPage({ params }: { params: { id: string }
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Categoría</p>
-                    <p className="font-medium">{producto.categoria}</p>
+                    <p className="font-medium">{producto.categoria.nombre}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Descripción</p>
@@ -210,7 +265,7 @@ export default function DetalleProductoPage({ params }: { params: { id: string }
                   <div>
                     <p className="text-sm text-muted-foreground">Margen de Ganancia</p>
                     <p className="font-medium">
-                      {(((producto.precio_venta - producto.precio_compra) / producto.precio_compra) * 100).toFixed(2)}%
+                      {(((producto.precio_venta - producto.precio_compra) / (producto.precio_compra || 1)) * 100).toFixed(2)}%
                     </p>
                   </div>
                 </div>
@@ -252,11 +307,11 @@ export default function DetalleProductoPage({ params }: { params: { id: string }
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Teléfono</p>
-                    <p className="font-medium">{producto.proveedor.telefono}</p>
+                    <p className="font-medium">{producto.proveedor.telefono || "No disponible"}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Correo</p>
-                    <p className="font-medium">{producto.proveedor.correo}</p>
+                    <p className="font-medium">{producto.proveedor.correo || "No disponible"}</p>
                   </div>
                   <div className="pt-2">
                     <Button variant="outline" size="sm" asChild>
@@ -277,34 +332,37 @@ export default function DetalleProductoPage({ params }: { params: { id: string }
             </CardHeader>
             <CardContent>
               <div className="space-y-8">
-                {producto.movimientos.map((movimiento) => (
-                  <div key={movimiento.id} className="flex">
-                    <div className="mr-4 flex flex-col items-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary bg-primary/10">
-                        {movimiento.tipo === "entrada" ? (
-                          <TrendingUp className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <TrendingDown className="h-5 w-5 text-red-500" />
-                        )}
+                {producto.movimientos.length ? (
+                  producto.movimientos.map((movimiento) => (
+                    <div key={movimiento.id} className="flex">
+                      <div className="mr-4 flex flex-col items-center">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary bg-primary/10">
+                          {movimiento.tipo === "entrada" ? (
+                            <TrendingUp className="h-5 w-5 text-green-500" />
+                          ) : (
+                            <TrendingDown className="h-5 w-5 text-red-500" />
+                          )}
+                        </div>
+                        <div className="h-full w-px bg-border" />
                       </div>
-                      <div className="h-full w-px bg-border" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{movimiento.fecha}</p>
-                        <Badge variant={movimiento.tipo === "entrada" ? "success" : "secondary"}>
-                          {movimiento.tipo === "entrada" ? "Entrada" : "Salida"}
-                        </Badge>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{movimiento.fecha}</p>
+                          <Badge variant={movimiento.tipo === "entrada" ? "success" : "secondary"}>
+                            {movimiento.tipo === "entrada" ? "Entrada" : "Salida"}
+                          </Badge>
+                        </div>
+                        <p className="text-sm">
+                          {movimiento.tipo === "entrada" ? "+" : "-"}{movimiento.cantidad} unidades
+                        </p>
+                        <p className="text-sm text-muted-foreground">Referencia: {movimiento.referencia}</p>
+                        <p className="text-xs text-muted-foreground">Por: {movimiento.usuario}</p>
                       </div>
-                      <p className="text-sm">
-                        {movimiento.tipo === "entrada" ? "+" : "-"}
-                        {movimiento.cantidad} unidades
-                      </p>
-                      <p className="text-sm text-muted-foreground">Referencia: {movimiento.referencia}</p>
-                      <p className="text-xs text-muted-foreground">Por: {movimiento.usuario}</p>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p>No hay movimientos registrados.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -318,9 +376,7 @@ export default function DetalleProductoPage({ params }: { params: { id: string }
             </CardHeader>
             <CardContent>
               {producto.ventas_recientes.length === 0 ? (
-                <div className="py-4 text-center text-muted-foreground">
-                  No hay ventas recientes para este producto.
-                </div>
+                <div className="py-4 text-center text-muted-foreground">No hay ventas recientes para este producto.</div>
               ) : (
                 <div className="space-y-4">
                   {producto.ventas_recientes.map((venta) => (
@@ -361,5 +417,5 @@ export default function DetalleProductoPage({ params }: { params: { id: string }
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

@@ -1,52 +1,38 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-
-const inventoryItems = [
-  {
-    id: "INV-001",
-    nombre: "Pantalla iPhone 12",
-    categoria: "Repuestos",
-    precio: 120,
-    cantidad: 5,
-    estado: "Normal",
-  },
-  {
-    id: "INV-002",
-    nombre: "Batería Samsung S21",
-    categoria: "Repuestos",
-    precio: 45,
-    cantidad: 8,
-    estado: "Normal",
-  },
-  {
-    id: "INV-003",
-    nombre: "Cargador USB-C",
-    categoria: "Accesorios",
-    precio: 15,
-    cantidad: 2,
-    estado: "Bajo",
-  },
-  {
-    id: "INV-004",
-    nombre: "Protector Pantalla",
-    categoria: "Accesorios",
-    precio: 10,
-    cantidad: 25,
-    estado: "Normal",
-  },
-  {
-    id: "INV-005",
-    nombre: "Funda iPhone 12",
-    categoria: "Accesorios",
-    precio: 18,
-    cantidad: 3,
-    estado: "Bajo",
-  },
-]
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 export function InventoryStatus() {
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      const { data, error } = await supabase
+        .from("inventario")
+        .select("id, nombre, categoria_id, precio, stock, stock_minimo")
+        .limit(5);
+      if (error) console.error("Error fetching inventory:", error);
+      else {
+        const inventoryWithCategories = await Promise.all(
+          (data || []).map(async (item) => ({
+            ...item,
+            categoria: (await supabase.from("categorias_productos").select("nombre").eq("id", item.categoria_id).single()).data?.nombre || "Sin categoría",
+            estado: item.stock <= item.stock_minimo ? "Bajo" : "Normal",
+          }))
+        );
+        setInventory(inventoryWithCategories);
+      }
+      setLoading(false);
+    };
+    fetchInventory();
+  }, []);
+
+  if (loading) return <div className="p-6">Cargando inventario...</div>;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -69,13 +55,13 @@ export function InventoryStatus() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {inventoryItems.map((item) => (
+            {inventory.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className="font-medium">{item.nombre}</TableCell>
                 <TableCell className="hidden md:table-cell">{item.categoria}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    {item.cantidad}
+                    {item.stock}
                     {item.estado === "Bajo" && (
                       <Badge variant="destructive" className="ml-2">
                         Stock Bajo
@@ -90,6 +76,5 @@ export function InventoryStatus() {
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 }
-

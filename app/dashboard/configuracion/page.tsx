@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,42 +14,104 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { Smartphone, Save, Settings, Shield, Database, MessageSquare } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
+
+interface ConfigGeneral {
+  nombreEmpresa: string
+  direccion: string
+  telefono: string
+  correo: string
+  sitioWeb: string
+  logo: string
+}
+
+interface ConfigNotificaciones {
+  notificarStockBajo: boolean
+  notificarNuevasOrdenes: boolean
+  notificarVentas: boolean
+  notificarPagos: boolean
+  correoNotificaciones: string
+}
+
+interface ConfigFacturacion {
+  moneda: string
+  impuesto: string
+  prefijo: string
+  terminosPago: string
+  notaFactura: string
+}
+
+interface ConfigUsuarios {
+  permitirRegistro: boolean
+  aprobacionManual: boolean
+  rolPredeterminado: string
+}
 
 export default function ConfiguracionPage() {
-  // Estado para la configuración general
-  const [configGeneral, setConfigGeneral] = useState({
-    nombreEmpresa: "Eco_Tech",
-    direccion: "Calle Principal 123, Ciudad",
-    telefono: "555-123-4567",
-    correo: "contacto@ecotech.com",
-    sitioWeb: "www.ecotech.com",
+  const [configGeneral, setConfigGeneral] = useState<ConfigGeneral>({
+    nombreEmpresa: "",
+    direccion: "",
+    telefono: "",
+    correo: "",
+    sitioWeb: "",
     logo: "",
   })
 
-  // Estado para la configuración de notificaciones
-  const [configNotificaciones, setConfigNotificaciones] = useState({
-    notificarStockBajo: true,
-    notificarNuevasOrdenes: true,
-    notificarVentas: true,
-    notificarPagos: true,
-    correoNotificaciones: "notificaciones@ecotech.com",
+  const [configNotificaciones, setConfigNotificaciones] = useState<ConfigNotificaciones>({
+    notificarStockBajo: false,
+    notificarNuevasOrdenes: false,
+    notificarVentas: false,
+    notificarPagos: false,
+    correoNotificaciones: "",
   })
 
-  // Estado para la configuración de facturación
-  const [configFacturacion, setConfigFacturacion] = useState({
-    moneda: "MXN",
-    impuesto: "16",
-    prefijo: "ECO-",
-    terminosPago: "Pago al contado o con tarjeta. No se aceptan devoluciones después de 15 días.",
-    notaFactura: "Gracias por su preferencia.",
+  const [configFacturacion, setConfigFacturacion] = useState<ConfigFacturacion>({
+    moneda: "",
+    impuesto: "",
+    prefijo: "",
+    terminosPago: "",
+    notaFactura: "",
   })
 
-  // Estado para la configuración de usuarios
-  const [configUsuarios, setConfigUsuarios] = useState({
+  const [configUsuarios, setConfigUsuarios] = useState<ConfigUsuarios>({
     permitirRegistro: false,
-    aprobacionManual: true,
-    rolPredeterminado: "vendedor",
+    aprobacionManual: false,
+    rolPredeterminado: "",
   })
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Cargar configuraciones desde Supabase
+  useEffect(() => {
+    const fetchConfiguraciones = async () => {
+      setLoading(true)
+
+      const { data, error } = await supabase
+        .from("configuraciones")
+        .select("general, notificaciones, facturacion, usuarios")
+        .eq("id", "global_config")
+        .single()
+
+      if (error) {
+        console.error("Error fetching configuraciones:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las configuraciones.",
+          variant: "destructive",
+        })
+      } else if (data) {
+        setConfigGeneral(data.general || {})
+        setConfigNotificaciones(data.notificaciones || {})
+        setConfigFacturacion(data.facturacion || {})
+        setConfigUsuarios(data.usuarios || {})
+      }
+
+      setLoading(false)
+    }
+
+    fetchConfiguraciones()
+  }, [])
 
   // Manejadores de cambios
   const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -97,21 +158,42 @@ export default function ConfiguracionPage() {
     }))
   }
 
-  // Guardar configuración
-  const guardarConfiguracion = () => {
-    // Aquí iría la lógica para guardar en Supabase
-    console.log("Configuración guardada:", {
-      general: configGeneral,
-      notificaciones: configNotificaciones,
-      facturacion: configFacturacion,
-      usuarios: configUsuarios,
-    })
+  // Guardar configuración en Supabase
+  const guardarConfiguracion = async () => {
+    setSaving(true)
 
-    // Mostrar mensaje de éxito
-    toast({
-      title: "Configuración guardada",
-      description: "La configuración ha sido guardada correctamente.",
-    })
+    try {
+      const { error } = await supabase
+        .from("configuraciones")
+        .upsert({
+          id: "global_config",
+          general: configGeneral,
+          notificaciones: configNotificaciones,
+          facturacion: configFacturacion,
+          usuarios: configUsuarios,
+          updated_at: new Date().toISOString(),
+        })
+
+      if (error) throw error
+
+      toast({
+        title: "Configuración guardada",
+        description: "La configuración ha sido guardada correctamente.",
+      })
+    } catch (error) {
+      console.error("Error saving configuraciones:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo guardar la configuración.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="flex flex-col gap-6 p-6"><DashboardHeader /><div>Cargando configuraciones...</div></div>
   }
 
   return (
@@ -119,9 +201,9 @@ export default function ConfiguracionPage() {
       <DashboardHeader />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold tracking-tight">Configuración</h2>
-        <Button onClick={guardarConfiguracion}>
+        <Button onClick={guardarConfiguracion} disabled={saving}>
           <Save className="mr-2 h-4 w-4" />
-          Guardar Cambios
+          {saving ? "Guardando..." : "Guardar Cambios"}
         </Button>
       </div>
 
@@ -189,7 +271,20 @@ export default function ConfiguracionPage() {
                 <div className="flex flex-col space-y-2">
                   <h3 className="text-sm font-medium">Logo de la Empresa</h3>
                   <p className="text-xs text-muted-foreground">Sube el logo de tu empresa en formato PNG o JPG</p>
-                  <Input type="file" accept="image/*" className="w-full max-w-xs" />
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    className="w-full max-w-xs"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        setConfigGeneral((prev) => ({
+                          ...prev,
+                          logo: file.name, // En una implementación real, subirías el archivo a Supabase Storage
+                        }))
+                      }
+                    }}
+                  />
                 </div>
               </div>
 

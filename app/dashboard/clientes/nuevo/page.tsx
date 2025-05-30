@@ -1,56 +1,64 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { ArrowLeft } from "lucide-react"
+import type React from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ArrowLeft } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
 
 export default function NuevoClientePage() {
-  const router = useRouter()
+  const router = useRouter();
   const [formData, setFormData] = useState({
     nombre: "",
+    cedula: "",
     telefono: "",
     correo: "",
     direccion: "",
     notas: "",
-  })
-  const [loading, setLoading] = useState(false)
+  });
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-  }
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
     try {
-      // Aquí iría la lógica para guardar en Supabase
-      console.log("Datos del cliente:", formData)
+      const { error } = await supabase.from("clientes").insert({
+        nombre: formData.nombre,
+        cedula: formData.cedula,
+        telefono: formData.telefono,
+        correo: formData.correo || null,
+        direccion: formData.direccion || null,
+        notas: formData.notas || null,
+      });
 
-      // Simular tiempo de carga
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      if (error) throw error;
 
-      // Redireccionar a la lista de clientes
-      router.push("/dashboard/clientes")
+      toast({ title: "Éxito", description: "Cliente creado correctamente." });
+      router.push("/dashboard/clientes");
     } catch (error) {
-      console.error("Error al crear el cliente:", error)
+      console.error("Error al crear el cliente:", error);
+      toast({ title: "Error", description: "No se pudo crear el cliente.", variant: "destructive" });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -79,6 +87,18 @@ export default function NuevoClientePage() {
                   name="nombre"
                   placeholder="Nombre y apellidos"
                   value={formData.nombre}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cedula">Cédula</Label>
+                <Input
+                  id="cedula"
+                  name="cedula"
+                  placeholder="Número de cédula"
+                  value={formData.cedula}
                   onChange={handleChange}
                   required
                 />
@@ -144,6 +164,5 @@ export default function NuevoClientePage() {
         </form>
       </Card>
     </div>
-  )
+  );
 }
-

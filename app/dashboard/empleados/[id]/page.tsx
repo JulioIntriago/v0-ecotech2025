@@ -1,20 +1,9 @@
 "use client"
 
-import { TableCell } from "@/components/ui/table"
-
-import { TableBody } from "@/components/ui/table"
-
-import { TableHead } from "@/components/ui/table"
-
-import { TableRow } from "@/components/ui/table"
-
-import { TableHeader } from "@/components/ui/table"
-
-import { Table } from "@/components/ui/table"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,64 +11,41 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ArrowLeft, Edit, Mail, Phone, MapPin, Trash, CreditCard, Briefcase, Calendar } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-// Datos de ejemplo para el empleado
-const empleado = {
-  id: "EMP-001",
-  nombre: "Carlos Ruiz",
-  cedula: "1122334455",
-  cargo: "Técnico",
-  telefono: "555-456-7890",
-  correo: "carlos.ruiz@ecotech.com",
-  direccion: "Calle Secundaria 456, Ciudad",
-  estado: "activo",
-  fecha_contratacion: "2022-01-15",
-  departamento: "Servicio Técnico",
-  supervisor: "Sofía Ramírez",
-  horario: "Lunes a Viernes, 9:00 - 18:00",
-  ordenes_asignadas: [
-    {
-      id: "ORD-001",
-      cliente: "Juan Pérez",
-      dispositivo: "iPhone 12",
-      problema: "Pantalla rota",
-      estado: "en_proceso",
-      fecha_ingreso: "2023-05-15",
-    },
-    {
-      id: "ORD-005",
-      cliente: "Pedro Sánchez",
-      dispositivo: "iPhone 11",
-      problema: "Cámara",
-      estado: "en_proceso",
-      fecha_ingreso: "2023-05-11",
-    },
-    {
-      id: "ORD-008",
-      cliente: "Elena Torres",
-      dispositivo: "Samsung A52",
-      problema: "Botones físicos",
-      estado: "finalizado",
-      fecha_ingreso: "2023-05-14",
-    },
-  ],
-  ventas_realizadas: [
-    {
-      id: "VTA-002",
-      cliente: "María López",
-      fecha: "2023-05-14",
-      total: 78.5,
-    },
-    {
-      id: "VTA-005",
-      cliente: "Pedro Sánchez",
-      fecha: "2023-05-13",
-      total: 55.75,
-    },
-  ],
+interface Orden {
+  id: string
+  cliente: string
+  dispositivo: string
+  problema: string
+  estado: string
+  fecha_ingreso: string
 }
 
-// Función para traducir el estado
+interface Venta {
+  id: string
+  cliente: string
+  fecha: string
+  total: number
+}
+
+interface Empleado {
+  id: string
+  nombre: string
+  cedula: string
+  cargo: string
+  telefono: string
+  correo: string
+  direccion: string
+  estado: "activo" | "inactivo"
+  fecha_contratacion: string
+  departamento: string
+  supervisor: string
+  horario: string
+  ordenes_asignadas: Orden[]
+  ventas_realizadas: Venta[]
+}
+
 function traducirEstado(estado: string) {
   const traducciones: Record<string, string> = {
     pendiente: "Pendiente",
@@ -90,7 +56,6 @@ function traducirEstado(estado: string) {
   return traducciones[estado] || estado
 }
 
-// Función para determinar la variante del badge según el estado
 function getVariantForEstado(estado: string) {
   const variantes: Record<string, "default" | "secondary" | "success" | "outline"> = {
     pendiente: "secondary",
@@ -101,17 +66,84 @@ function getVariantForEstado(estado: string) {
   return variantes[estado] || "default"
 }
 
-export default function DetalleEmpleadoPage({ params }: { params: { id: string } }) {
+export default function DetalleEmpleadoPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const params = useParams()
+  const id = params.id as string
+  const [empleado, setEmpleado] = useState<Empleado | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [loadingDelete, setLoadingDelete] = useState(false)
+
+  useEffect(() => {
+    const fetchEmpleado = async () => {
+      setLoading(true)
+      setError(null)
+
+      // Obtener datos del empleado
+      const { data: empleadoData, error: empleadoError } = await supabase
+        .from("empleados")
+        .select("*")
+        .eq("id", id)
+        .single()
+
+      if (empleadoError) {
+        console.error("Error fetching empleado:", empleadoError)
+        setError("No se pudo cargar el empleado. Intenta de nuevo más tarde.")
+        setLoading(false)
+        return
+      }
+
+      // Obtener órdenes asignadas
+      const { data: ordenesData, error: ordenesError } = await supabase
+        .from("ordenes")
+        .select("*")
+        .eq("empleado_id", id)
+
+      if (ordenesError) {
+        console.error("Error fetching órdenes:", ordenesError)
+        setError("No se pudieron cargar las órdenes asignadas.")
+        setLoading(false)
+        return
+      }
+
+      // Obtener ventas realizadas
+      const { data: ventasData, error: ventasError } = await supabase
+        .from("ventas")
+        .select("*")
+        .eq("empleado_id", id)
+
+      if (ventasError) {
+        console.error("Error fetching ventas:", ventasError)
+        setError("No se pudieron cargar las ventas realizadas.")
+        setLoading(false)
+        return
+      }
+
+      setEmpleado({
+        ...empleadoData,
+        ordenes_asignadas: ordenesData || [],
+        ventas_realizadas: ventasData || [],
+      })
+      setLoading(false)
+    }
+
+    if (id) {
+      fetchEmpleado()
+    }
+  }, [id])
 
   const handleEliminarEmpleado = async () => {
     if (confirm("¿Estás seguro de que deseas eliminar este empleado? Esta acción no se puede deshacer.")) {
-      setLoading(true)
+      setLoadingDelete(true)
 
       try {
-        // Simulación de eliminación
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        const { error } = await supabase
+          .from("empleados")
+          .delete()
+          .eq("id", id)
+
+        if (error) throw error
 
         toast({
           title: "Empleado eliminado",
@@ -120,19 +152,28 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
 
         router.push("/dashboard/empleados")
       } catch (error) {
+        console.error("Error deleting empleado:", error)
         toast({
           title: "Error",
           description: "No se pudo eliminar el empleado.",
           variant: "destructive",
         })
       } finally {
-        setLoading(false)
+        setLoadingDelete(false)
       }
     }
   }
 
+  if (loading) {
+    return <div className="flex flex-col gap-4 p-2"><DashboardHeader /><div>Cargando empleado...</div></div>
+  }
+
+  if (error || !empleado) {
+    return <div className="flex flex-col gap-4 p-2"><DashboardHeader /><div className="text-red-500">{error || "Empleado no encontrado."}</div></div>
+  }
+
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 p-2">
       <DashboardHeader />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -146,12 +187,12 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/empleados/${params.id}/editar`}>
+            <Link href={`/dashboard/empleados/${id}/editar`}>
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </Link>
           </Button>
-          <Button variant="destructive" size="sm" onClick={handleEliminarEmpleado} disabled={loading}>
+          <Button variant="destructive" size="sm" onClick={handleEliminarEmpleado} disabled={loadingDelete}>
             <Trash className="mr-2 h-4 w-4" />
             Eliminar
           </Button>
@@ -175,28 +216,28 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
                   <dt className="text-sm font-medium text-muted-foreground">Cédula</dt>
                   <dd className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    <span>{empleado.cedula}</span>
+                    <span>{empleado.cedula || "No especificado"}</span>
                   </dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Teléfono</dt>
                   <dd className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{empleado.telefono}</span>
+                    <span>{empleado.telefono || "No especificado"}</span>
                   </dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Correo Electrónico</dt>
                   <dd className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{empleado.correo}</span>
+                    <span>{empleado.correo || "No especificado"}</span>
                   </dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Dirección</dt>
                   <dd className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{empleado.direccion}</span>
+                    <span>{empleado.direccion || "No especificado"}</span>
                   </dd>
                 </div>
               </dl>
@@ -213,18 +254,18 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
                   <dt className="text-sm font-medium text-muted-foreground">Cargo</dt>
                   <dd className="flex items-center gap-2">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <span>{empleado.cargo}</span>
+                    <span>{empleado.cargo || "No especificado"}</span>
                   </dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Departamento</dt>
-                  <dd>{empleado.departamento}</dd>
+                  <dd>{empleado.departamento || "No especificado"}</dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Fecha de Contratación</dt>
                   <dd className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{empleado.fecha_contratacion}</span>
+                    <span>{empleado.fecha_contratacion || "No especificado"}</span>
                   </dd>
                 </div>
                 <div className="space-y-1">
@@ -237,11 +278,11 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Supervisor</dt>
-                  <dd>{empleado.supervisor}</dd>
+                  <dd>{empleado.supervisor || "No especificado"}</dd>
                 </div>
                 <div className="space-y-1">
                   <dt className="text-sm font-medium text-muted-foreground">Horario</dt>
-                  <dd>{empleado.horario}</dd>
+                  <dd>{empleado.horario || "No especificado"}</dd>
                 </div>
               </dl>
             </CardContent>
@@ -281,13 +322,13 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
                             {orden.id}
                           </Link>
                         </TableCell>
-                        <TableCell>{orden.cliente}</TableCell>
-                        <TableCell className="hidden md:table-cell">{orden.dispositivo}</TableCell>
-                        <TableCell className="hidden md:table-cell">{orden.problema}</TableCell>
+                        <TableCell>{orden.cliente || "No especificado"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{orden.dispositivo || "No especificado"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{orden.problema || "No especificado"}</TableCell>
                         <TableCell>
                           <Badge variant={getVariantForEstado(orden.estado)}>{traducirEstado(orden.estado)}</Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{orden.fecha_ingreso}</TableCell>
+                        <TableCell className="hidden md:table-cell">{orden.fecha_ingreso || "No especificado"}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -328,9 +369,9 @@ export default function DetalleEmpleadoPage({ params }: { params: { id: string }
                             {venta.id}
                           </Link>
                         </TableCell>
-                        <TableCell>{venta.cliente}</TableCell>
-                        <TableCell>{venta.fecha}</TableCell>
-                        <TableCell className="text-right">${venta.total.toFixed(2)}</TableCell>
+                        <TableCell>{venta.cliente || "No especificado"}</TableCell>
+                        <TableCell>{venta.fecha || "No especificado"}</TableCell>
+                        <TableCell className="text-right">${(venta.total || 0).toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   )}

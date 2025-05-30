@@ -1,30 +1,41 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { format } from "date-fns"
-import { CalendarIcon } from "lucide-react"
-import type { DateRange } from "react-day-picker"
+import * as React from "react";
+import { format } from "date-fns";
+import { CalendarIcon } from "lucide-react";
+import { DateRange } from "react-day-picker"; // Importación corregida
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
+// Definimos las props del componente
 interface DatePickerWithRangeProps {
-  className?: string
-  date?: DateRange | undefined
-  setDate?: React.Dispatch<React.SetStateAction<DateRange | undefined>>
+  className?: string;
+  date?: DateRange | undefined;
+  setDate?: React.Dispatch<React.SetStateAction<DateRange | undefined>>;
 }
 
-export function DatePickerWithRange({ className, date, setDate }: DatePickerWithRangeProps) {
-  const [dateValue, setDateValue] = React.useState<DateRange | undefined>(date)
+// Exportamos el tipo DateRange para que otros componentes puedan usarlo
+export type { DateRange };
 
+export function DatePickerWithRange({ className, date, setDate }: DatePickerWithRangeProps) {
+  // Estado local para manejar el rango de fechas
+  const [dateValue, setDateValue] = React.useState<DateRange | undefined>(date);
+
+  // Sincronizamos el estado local con la prop date cuando cambia
+  React.useEffect(() => {
+    setDateValue(date);
+  }, [date]);
+
+  // Manejar el cambio de fechas
   const handleDateChange = (newDate: DateRange | undefined) => {
-    setDateValue(newDate)
+    setDateValue(newDate);
     if (setDate) {
-      setDate(newDate)
+      setDate(newDate);
     }
-  }
+  };
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -61,6 +72,5 @@ export function DatePickerWithRange({ className, date, setDate }: DatePickerWith
         </PopoverContent>
       </Popover>
     </div>
-  )
+  );
 }
-

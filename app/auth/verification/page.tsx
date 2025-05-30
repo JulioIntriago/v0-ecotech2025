@@ -1,9 +1,28 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle } from "lucide-react"
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { CheckCircle } from "lucide-react";
 
 export default function VerificationPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push("/dashboard");
+      } else {
+        router.push("/auth/login"); // Redirige a login si no hay sesión
+      }
+    };
+    checkSession();
+  }, [router]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-md">
@@ -27,6 +46,5 @@ export default function VerificationPage() {
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }
-

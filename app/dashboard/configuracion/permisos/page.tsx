@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -8,177 +8,128 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
-// Datos de ejemplo para los permisos
-const permisosIniciales = {
-  administrador: {
-    dashboard: true,
-    ventas: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: true,
-    },
-    inventario: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: true,
-    },
-    clientes: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: true,
-    },
-    ordenes: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: true,
-    },
-    empleados: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: true,
-    },
-    proveedores: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: true,
-    },
-    configuracion: true,
-    reportes: true,
-  },
-  tecnico: {
-    dashboard: true,
-    ventas: {
-      ver: true,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    inventario: {
-      ver: true,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    clientes: {
-      ver: true,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    ordenes: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: false,
-    },
-    empleados: {
-      ver: false,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    proveedores: {
-      ver: false,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    configuracion: false,
-    reportes: false,
-  },
-  vendedor: {
-    dashboard: true,
-    ventas: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: false,
-    },
-    inventario: {
-      ver: true,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    clientes: {
-      ver: true,
-      crear: true,
-      editar: true,
-      eliminar: false,
-    },
-    ordenes: {
-      ver: true,
-      crear: true,
-      editar: false,
-      eliminar: false,
-    },
-    empleados: {
-      ver: false,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    proveedores: {
-      ver: false,
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    configuracion: false,
-    reportes: true,
-  },
+interface Permisos {
+  administrador: PermisoRol
+  tecnico: PermisoRol
+  vendedor: PermisoRol
+}
+
+interface PermisoRol {
+  dashboard: boolean
+  ventas: PermisoAcciones
+  inventario: PermisoAcciones
+  clientes: PermisoAcciones
+  ordenes: PermisoAcciones
+  empleados: PermisoAcciones
+  proveedores: PermisoAcciones
+  configuracion: boolean
+  reportes: boolean
+}
+
+interface PermisoAcciones {
+  ver: boolean
+  crear: boolean
+  editar: boolean
+  eliminar: boolean
 }
 
 export default function PermisosPage() {
-  const [permisos, setPermisos] = useState(permisosIniciales)
-  const [loading, setLoading] = useState(false)
+  const [permisos, setPermisos] = useState<Permisos | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Cargar permisos desde Supabase
+  useEffect(() => {
+    const fetchPermisos = async () => {
+      setLoading(true)
+
+      const { data, error } = await supabase
+        .from("permisos")
+        .select("administrador, tecnico, vendedor")
+        .eq("id", "permisos_config")
+        .single()
+
+      if (error) {
+        console.error("Error fetching permisos:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los permisos.",
+          variant: "destructive",
+        })
+      } else if (data) {
+        setPermisos({
+          administrador: data.administrador || {},
+          tecnico: data.tecnico || {},
+          vendedor: data.vendedor || {},
+        })
+      }
+
+      setLoading(false)
+    }
+
+    fetchPermisos()
+  }, [])
 
   const handlePermissionChange = (role: string, module: string, action?: string) => {
     setPermisos((prevPermisos) => {
+      if (!prevPermisos) return prevPermisos
+
       const newPermisos = { ...prevPermisos }
+      const rolePermisos = { ...newPermisos[role] }
 
       if (action) {
-        // Es un permiso de acción específica (ver, crear, etc.)
-        newPermisos[role][module][action] = !newPermisos[role][module][action]
+        rolePermisos[module] = {
+          ...rolePermisos[module],
+          [action]: !rolePermisos[module][action],
+        }
       } else {
-        // Es un permiso de módulo completo (dashboard, configuracion, etc.)
-        newPermisos[role][module] = !newPermisos[role][module]
+        rolePermisos[module] = !rolePermisos[module]
       }
 
+      newPermisos[role] = rolePermisos
       return newPermisos
     })
   }
 
   const handleSavePermissions = async () => {
-    setLoading(true)
+    if (!permisos) return
+
+    setSaving(true)
 
     try {
-      // Simulación de guardado
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const { error } = await supabase
+        .from("permisos")
+        .upsert({
+          id: "permisos_config",
+          administrador: permisos.administrador,
+          tecnico: permisos.tecnico,
+          vendedor: permisos.vendedor,
+          updated_at: new Date().toISOString(),
+        })
+
+      if (error) throw error
 
       toast({
         title: "Permisos actualizados",
         description: "Los permisos han sido actualizados correctamente.",
       })
     } catch (error) {
+      console.error("Error saving permisos:", error)
       toast({
         title: "Error",
         description: "No se pudieron actualizar los permisos.",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
   const renderPermissionCheckbox = (role: string, module: string, action?: string, label?: string) => {
+    if (!permisos) return null
+
     const checked = action ? permisos[role][module][action] : permisos[role][module]
 
     return (
@@ -199,6 +150,14 @@ export default function PermisosPage() {
         </Label>
       </div>
     )
+  }
+
+  if (loading) {
+    return <div className="flex flex-col gap-6 p-6"><DashboardHeader /><div>Cargando permisos...</div></div>
+  }
+
+  if (!permisos) {
+    return <div className="flex flex-col gap-6 p-6"><DashboardHeader /><div>Error: Permisos no encontrados.</div></div>
   }
 
   return (
@@ -284,8 +243,8 @@ export default function PermisosPage() {
       </Tabs>
 
       <div className="flex justify-end">
-        <Button onClick={handleSavePermissions} disabled={loading}>
-          {loading ? "Guardando..." : "Guardar Cambios"}
+        <Button onClick={handleSavePermissions} disabled={saving}>
+          {saving ? "Guardando..." : "Guardar Cambios"}
         </Button>
       </div>
     </div>

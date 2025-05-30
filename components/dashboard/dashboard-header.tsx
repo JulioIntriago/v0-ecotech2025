@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { useSidebar } from "./sidebar-provider"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Bell, Menu, Search, User } from "lucide-react"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Bell, User, Sun, Moon, Monitor } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
+import { useNotificaciones } from "@/components/dashboard/notificaciones-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,37 +13,71 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 
 export function DashboardHeader() {
-  const { setIsOpen } = useSidebar()
-  const [searchQuery, setSearchQuery] = useState("")
+  const { noLeidas } = useNotificaciones();
+  const { theme, setTheme } = useTheme();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Asegurarse de que el componente esté montado en el cliente antes de renderizar el ícono de tema
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   return (
-    <header className="flex items-center justify-between gap-4">
+    <header className="flex items-center justify-between gap-4 p-4 bg-card shadow-sm">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsOpen(true)}>
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Abrir menú</span>
-        </Button>
         <h1 className="text-xl font-bold md:text-2xl">Dashboard</h1>
       </div>
-      <div className="flex flex-1 items-center justify-end gap-4">
-        <div className="relative hidden md:block md:w-64 lg:w-80">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar..."
-            className="w-full pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary"></span>
-          <span className="sr-only">Notificaciones</span>
+      <div className="flex items-center gap-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full">
+              {/* Mostrar el ícono solo después de que el componente esté montado */}
+              {isMounted ? (
+                theme === "dark" ? (
+                  <Moon className="h-5 w-5 text-gray-400" />
+                ) : theme === "light" ? (
+                  <Sun className="h-5 w-5 text-yellow-500" />
+                ) : (
+                  <Monitor className="h-5 w-5 text-gray-600" />
+                )
+              ) : (
+                // Mientras no esté montado, usa un ícono por defecto o un placeholder
+                <Monitor className="h-5 w-5 text-gray-600" />
+              )}
+              <span className="sr-only">Cambiar tema</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setTheme("light")}>
+              <Sun className="mr-2 h-4 w-4 text-yellow-500" />
+              Claro
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")}>
+              <Moon className="mr-2 h-4 w-4 text-gray-400" />
+              Oscuro
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")}>
+              <Monitor className="mr-2 h-4 w-4 text-gray-600" />
+              Sistema
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button variant="ghost" size="icon" className="relative" asChild>
+          <Link href="/dashboard/notificaciones">
+            <Bell className="h-5 w-5" />
+            {noLeidas > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-xs text-white">
+                {noLeidas}
+              </span>
+            )}
+            <span className="sr-only">Notificaciones</span>
+          </Link>
         </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
@@ -61,6 +96,5 @@ export function DashboardHeader() {
         </DropdownMenu>
       </div>
     </header>
-  )
+  );
 }
-
