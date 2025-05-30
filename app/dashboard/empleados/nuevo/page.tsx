@@ -19,7 +19,7 @@ export default function NuevoEmpleadoPage() {
   const [formData, setFormData] = useState({
     nombre: "",
     cedula: "",
-    role: "", // Ajustado de cargo a role
+    role: "", // Ajustado de cargo 
     departamento: "",
     telefono: "",
     correo: "",
