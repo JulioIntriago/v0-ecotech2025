@@ -9,6 +9,24 @@ import { RecentOrders } from "@/components/dashboard/recent-orders";
 import { InventoryStatus } from "@/components/dashboard/inventory-status";
 import { DatePickerWithRange, DateRange } from "@/components/dashboard/date-range-picker";
 
+// Definición de tipos para las respuestas de Supabase
+interface PermissionModule {
+  name: string;
+}
+
+interface Permission {
+  permission_modules: PermissionModule[];
+}
+
+interface Sale {
+  total: number | null;
+}
+
+interface InventoryItem {
+  stock: number | null;
+  stock_minimo: number | null;
+}
+
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState({
     activeOrders: { current: 0, previous: 0 },
@@ -34,12 +52,27 @@ export default function DashboardPage() {
         return;
       }
 
-      // Obtener permisos del usuario
+      // Obtener el rol del usuario desde la tabla users
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+      if (userError || !user?.role) {
+        router.push("/auth/login");
+        return;
+      }
+
+      // Obtener permisos basados en el rol
       const { data: permissions, error: permError } = await supabase
         .from("role_permissions")
-        .select("permission_modules(name)")
-        .eq("user_id", session.user.id);
-      if (permError || !permissions.some(p => p.permission_modules.name === "dashboard_access")) {
+        .select(`
+          permission_modules (
+            name
+          )
+        `)
+        .eq("role", user.role);
+      if (permError || !permissions?.some((p: Permission) => p.permission_modules.some((module) => module.name === "dashboard_access"))) {
         router.push("/auth/login");
         return;
       }
@@ -102,14 +135,15 @@ export default function DashboardPage() {
           .gte("created_at", previousPeriod.from?.toISOString() || "")
           .lte("created_at", previousPeriod.to?.toISOString() || "");
 
-        const monthlySalesTotal = sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
-        const prevMonthlySalesTotal = prevSales.reduce((sum, sale) => sum + (sale.total || 0), 0);
-        const lowStockCount = inventory.filter(item => (item.stock || 0) <= (item.stock_minimo || 0)).length;
+        // Calcular totales asegurando que no sea null
+        const monthlySalesTotal = sales?.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0;
+        const prevMonthlySalesTotal = prevSales?.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0;
+        const lowStockCount = inventory?.filter((item: InventoryItem) => (item.stock || 0) <= (item.stock_minimo || 0)).length || 0;
 
         setMetrics({
           activeOrders: { current: activeOrders?.length || 0, previous: prevActiveOrders?.length || 0 },
           monthlySales: { current: monthlySalesTotal, previous: prevMonthlySalesTotal },
-          stockItems: inventory.length,
+          stockItems: inventory?.length || 0,
           lowStockItems: lowStockCount,
           newClients: { current: clients?.length || 0, previous: prevClients?.length || 0 },
         });
