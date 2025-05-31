@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -14,17 +14,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { supabase } from "@/lib/supabase";
 
 export function DashboardHeader() {
   const { noLeidas } = useNotificaciones();
   const { theme, setTheme } = useTheme();
-  const [searchQuery, setSearchQuery] = useState("");
   const [isMounted, setIsMounted] = useState(false);
 
-  // Asegurarse de que el componente esté montado en el cliente antes de renderizar el ícono de tema
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/auth/login";
+  };
 
   return (
     <header className="flex items-center justify-between gap-4 p-4 bg-card shadow-sm">
@@ -35,7 +39,6 @@ export function DashboardHeader() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
-              {/* Mostrar el ícono solo después de que el componente esté montado */}
               {isMounted ? (
                 theme === "dark" ? (
                   <Moon className="h-5 w-5 text-gray-400" />
@@ -45,7 +48,6 @@ export function DashboardHeader() {
                   <Monitor className="h-5 w-5 text-gray-600" />
                 )
               ) : (
-                // Mientras no esté montado, usa un ícono por defecto o un placeholder
                 <Monitor className="h-5 w-5 text-gray-600" />
               )}
               <span className="sr-only">Cambiar tema</span>
@@ -77,7 +79,6 @@ export function DashboardHeader() {
             <span className="sr-only">Notificaciones</span>
           </Link>
         </Button>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
@@ -88,10 +89,14 @@ export function DashboardHeader() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Perfil</DropdownMenuItem>
-            <DropdownMenuItem>Configuración</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/perfil">Perfil</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/configuracion">Configuración</Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Cerrar Sesión</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>Cerrar Sesión</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

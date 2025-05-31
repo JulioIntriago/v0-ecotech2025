@@ -8,25 +8,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DateRange } from "react-day-picker";
 
-export function RecentOrders() {
+interface RecentOrdersProps {
+  dateRange?: DateRange;
+}
+
+export function RecentOrders({ dateRange }: RecentOrdersProps) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from("ordenes")
           .select("*")
           .order("created_at", { ascending: false })
           .limit(5);
 
+        // Aplicar filtro de fechas si existe
+        if (dateRange?.from && dateRange?.to) {
+          query = query
+            .gte("created_at", dateRange.from.toISOString())
+            .lte("created_at", dateRange.to.toISOString());
+        }
+
+        const { data, error } = await query;
+
         if (error) {
           console.error("Error fetching orders:", error);
         } else {
-          // Obtener datos de equipos para cada orden
-          const ordersWithEquipment = await Promise.all(
+          // Obtener datos de equipos y clientes para cada orden
+          const ordersWithDetails = await Promise.all(
             (data || []).map(async (order) => {
               const { data: equipmentData, error: equipmentError } = await supabase
                 .from("equipos")
@@ -34,19 +48,25 @@ export function RecentOrders() {
                 .eq("id", order.equipo_id)
                 .single();
 
-              if (equipmentError) {
-                console.error("Error fetching equipment for order", order.id, ":", equipmentError);
-              }
+              const { data: clientData, error: clientError } = await supabase
+                .from("clientes")
+                .select("nombre")
+                .eq("id", order.cliente_id)
+                .single();
+
+              if (equipmentError) console.error("Error fetching equipment for order", order.id, ":", equipmentError);
+              if (clientError) console.error("Error fetching client for order", order.id, ":", clientError);
 
               return {
                 ...order,
                 equipo_marca: equipmentData?.marca || "Desconocido",
                 equipo_modelo: equipmentData?.modelo || "Desconocido",
+                cliente_nombre: clientData?.nombre || "Desconocido",
               };
             })
           );
 
-          setOrders(ordersWithEquipment);
+          setOrders(ordersWithDetails);
         }
       } catch (error) {
         console.error("General error fetching orders:", error);
@@ -56,7 +76,7 @@ export function RecentOrders() {
     };
 
     fetchOrders();
-  }, []);
+  }, [dateRange]); // Dependencia en dateRange para recargar cuando cambie
 
   if (loading) return <div className="p-6">Cargando órdenes...</div>;
 
@@ -67,8 +87,8 @@ export function RecentOrders() {
           <CardTitle>Órdenes Recientes</CardTitle>
           <CardDescription>Últimas 5 órdenes de reparación registradas</CardDescription>
         </div>
-        <Button variant="outline" size="sm">
-          Ver todas
+        <Button variant="outline" size="sm" asChild>
+          <a href="/dashboard/ordenes">Ver todas</a>
         </Button>
       </CardHeader>
       <CardContent>
@@ -112,8 +132,12 @@ export function RecentOrders() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>Ver detalles</DropdownMenuItem>
-                      <DropdownMenuItem>Editar orden</DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <a href={`/dashboard/ordenes/${order.id}`}>Ver detalles</a>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <a href={`/dashboard/ordenes/${order.id}/editar`}>Editar orden</a>
+                      </DropdownMenuItem>
                       <DropdownMenuItem>Actualizar estado</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
