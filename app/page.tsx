@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import Header from "@/components/Header";
 
 export default function LandingPage() {
   const [statusData, setStatusData] = useState<any>(null);
@@ -24,7 +25,6 @@ export default function LandingPage() {
     mensaje: "",
   });
 
-  // Efecto de desplazamiento suave al cargar secciones
   useEffect(() => {
     const sections = document.querySelectorAll("section");
     const observer = new IntersectionObserver(
@@ -152,31 +152,7 @@ export default function LandingPage() {
         }
       `}</style>
 
-      <header className="sticky top-0 z-40 border-b bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
-        <div className="container flex h-16 items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-2">
-            <Smartphone className="h-6 w-6" />
-            <span className="text-xl font-bold">Eco_Tech</span>
-          </div>
-          <nav className="flex items-center space-x-6">
-            <Link href="#servicios" className="text-sm font-medium hover:text-blue-200 transition-colors">
-              Servicios
-            </Link>
-            <Link href="#nosotros" className="text-sm font-medium hover:text-blue-200 transition-colors">
-              Nosotros
-            </Link>
-            <Link href="#contacto" className="text-sm font-medium hover:text-blue-200 transition-colors">
-              Contacto
-            </Link>
-            <Link href="/auth/login" className="text-sm font-medium hover:text-blue-200 transition-colors">
-              Iniciar Sesión
-            </Link>
-            <Link href="/auth/register" className="text-sm font-medium hover:text-blue-200 transition-colors">
-              Registrarse
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <main className="flex-1">
         <section className="bg-gradient-to-b from-blue-50 to-white py-24">
@@ -419,6 +395,8 @@ export default function LandingPage() {
           <div className="flex gap-4">
             <Link href="#" className="text-sm text-gray-600 hover:text-blue-600">Términos</Link>
             <Link href="#" className="text-sm text-gray-600 hover:text-blue-600">Privacidad</Link>
+            <Link href="/auth/login" className="text-sm text-gray-600 hover:text-blue-600">Acceso para Equipo</Link>
+
           </div>
         </div>
       </footer>

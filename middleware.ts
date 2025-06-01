@@ -1,39 +1,37 @@
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export async function middleware(request: NextRequest) {
-  const response = NextResponse.next();
-  const supabase = createMiddlewareClient({ req: request, res: response });
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-  const url = request.nextUrl.pathname;
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "");
 
-  // Manejar el callback de autenticación (opcional, para mantener el flujo)
-  if (url === "/auth/callback") {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log("No hay sesión después del callback, redirigiendo a /auth/login");
-      return NextResponse.redirect(new URL("/auth/login", request.url));
+  if (!token && pathname.startsWith("/dashboard")) {
+    return NextResponse.redirect(new URL("/auth/login", req.url));
+  }
+
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user && pathname.startsWith("/dashboard")) {
+    return NextResponse.redirect(new URL("/auth/login", req.url));
+  }
+
+  if (user) {
+    const { data: userData } = await supabase.from("users").select("role, email_verified").eq("id", user.id).single();
+    if (!userData?.email_verified && pathname !== "/auth/verification") {
+      return NextResponse.redirect(new URL("/auth/verification", req.url));
     }
-    console.log("Sesión encontrada después del callback, redirigiendo a /dashboard");
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (userData?.role !== "admin" && pathname.startsWith("/dashboard/empleados")) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    if (userData?.role === "cliente" && pathname !== "/" && !pathname.startsWith("/auth")) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
   }
 
-  // Permitir acceso a todas las rutas en desarrollo sin autenticación
-  if (process.env.NODE_ENV === "development") {
-    console.log("Modo desarrollo: permitiendo acceso a", url);
-    return response;
-  }
-
-  // Proteger todas las rutas en producción
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session && !url.startsWith("/auth")) {
-    console.log("Sin sesión en producción, redirigiendo a /auth/login desde", url);
-    return NextResponse.redirect(new URL("/auth/login", request.url));
-  }
-
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!api|_next|_static|_vercel|favicon.ico).*)"],
+  matcher: ["/dashboard/:path*", "/auth/:path*", "/"],
 };

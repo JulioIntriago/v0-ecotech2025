@@ -1,49 +1,61 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, sendEmailVerification } from "firebase/auth";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 
 export default function VerificationPage() {
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.push("/dashboard");
-      } else {
-        router.push("/auth/login"); // Redirige a login si no hay sesión
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push("/auth/login");
+        return;
       }
-    };
-    checkSession();
+      if (user.emailVerified) {
+        await supabase.from("users").update({ email_verified: true }).eq("id", user.uid);
+        toast({ title: "Email verificado", description: "Redirigiendo..." });
+        router.push("/dashboard");
+      }
+    });
+    return () => unsubscribe();
   }, [router]);
 
+  const handleResendEmail = async () => {
+    setLoading(true);
+    try {
+      if (auth.currentUser) {
+        await sendEmailVerification(auth.currentUser, { url: `${window.location.origin}/auth/verification` });
+        toast({ title: "Correo enviado", description: "Revisa tu bandeja de entrada." });
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-muted">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center">
-            <CheckCircle className="h-12 w-12 text-success" />
-          </div>
-          <CardTitle className="text-2xl">Verifica tu correo</CardTitle>
-          <CardDescription>Hemos enviado un enlace de verificación a tu correo electrónico.</CardDescription>
+        <CardHeader>
+          <CardTitle className="text-center">Verifica tu correo</CardTitle>
         </CardHeader>
         <CardContent className="text-center">
-          <p className="text-muted-foreground">
-            Por favor, revisa tu bandeja de entrada y haz clic en el enlace para verificar tu cuenta. Si no encuentras
-            el correo, revisa tu carpeta de spam.
-          </p>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <Button asChild>
-            <Link href="/auth/login">Volver al inicio de sesión</Link>
+          <CheckCircle className="h-12 w-12 mx-auto text-success" />
+          <p className="mt-4">Hemos enviado un enlace de verificación a tu correo.</p>
+          <Button onClick={handleResendEmail} disabled={loading} className="mt-4">
+            {loading ? "Enviando..." : "Reenviar Correo"}
           </Button>
-        </CardFooter>
+        </CardContent>
       </Card>
     </div>
   );

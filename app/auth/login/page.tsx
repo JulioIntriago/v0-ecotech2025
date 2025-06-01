@@ -1,77 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { auth } from "@/lib/firebase";
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Smartphone, Chrome } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Chrome } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import Link from "next/link";
+import { Crown, Shield } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    rememberMe: false,
-  });
+  const [mode, setMode] = useState<"superadmin" | "empleado">("superadmin");
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleCheckboxChange = (checked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      rememberMe: checked,
-    }));
-  };
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
+      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
 
-      if (error) {
-        if (error.message === "Email not confirmed") {
-          toast({
-            title: "Error de inicio de sesión",
-            description: "Por favor, verifica tu correo antes de iniciar sesión.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Error de inicio de sesión",
-            description: error.message || "Correo o contraseña incorrectos",
-            variant: "destructive",
-          });
-        }
-        throw error;
+      if (!user.emailVerified) {
+        router.push("/auth/verification");
+        return;
       }
 
-      if (data.session) {
-        toast({
-          title: "Inicio de sesión exitoso",
-          description: "Redirigiendo al dashboard...",
-        });
-        router.push("/dashboard");
+      const { data: userData } = await supabase.from("users").select("role").eq("id", user.uid).single();
+      if (!userData) throw new Error("Usuario no encontrado");
+
+      if (!["tecnico", "vendedor"].includes(userData.role)) {
+        throw new Error("Acceso denegado. Solo empleados pueden iniciar sesión con correo y contraseña.");
       }
+
+      toast({ title: "Inicio de sesión exitoso", description: "Redirigiendo..." });
+      router.push("/dashboard");
     } catch (error: any) {
-      console.error("Login error details:", error);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -79,106 +54,94 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: process.env.NODE_ENV === "development"
-            ? "http://localhost:3000/auth/callback"
-            : "https://tu-dominio.com/auth/callback",
-        },
-      });
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
 
-      if (error) throw error;
+      const { data: existingUser } = await supabase.from("users").select("*").eq("id", user.uid).single();
+      if (!existingUser) {
+        throw new Error("Usuario no registrado. Contacta al administrador.");
+      }
+
+      if (!user.emailVerified) {
+        router.push("/auth/verification");
+        return;
+      }
+
+      if (existingUser.role !== "admin") {
+        throw new Error("Acceso denegado. Solo el Super Admin puede iniciar sesión con Google.");
+      }
+
+      toast({ title: "Inicio de sesión exitoso", description: "Redirigiendo..." });
+      router.push("/dashboard");
     } catch (error: any) {
-      console.error("Google login error:", error.message);
-      toast({
-        title: "Error",
-        description: error.message || "Error al iniciar sesión con Google",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Link href="/" className="mb-2 flex items-center gap-2">
-            <Smartphone className="h-6 w-6 text-primary" />
-            <span className="text-2xl font-bold">Eco_Tech</span>
-          </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Iniciar Sesión</h1>
-          <p className="text-sm text-muted-foreground">Ingresa tus credenciales para acceder</p>
-        </div>
-
-        <Card>
-          <form onSubmit={handleEmailLogin}>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Correo Electrónico</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="correo@ejemplo.com"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Contraseña</Label>
-                    <Link href="/auth/reset-password" className="text-xs text-primary hover:underline">
-                      ¿Olvidaste tu contraseña?
-                    </Link>
-                  </div>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="rememberMe" checked={formData.rememberMe} onCheckedChange={handleCheckboxChange} />
-                  <Label htmlFor="rememberMe" className="text-sm font-normal">
-                    Recordarme
-                  </Label>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col space-y-3">
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
-              </Button>
-              <div className="text-center text-sm text-muted-foreground">o</div>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold text-gray-800">Eco_Tech - Acceso</CardTitle>
+          <p className="text-sm text-gray-600">Iniciar sesión como equipo</p>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-6">
+            <div className="flex justify-around mb-4">
               <Button
-                onClick={handleGoogleLogin}
-                variant="outline"
-                className="w-full flex items-center justify-center gap-2 border border-gray-300"
-                disabled={loading}
+                variant={mode === "superadmin" ? "default" : "outline"}
+                className={`flex-1 mx-1 ${mode === "superadmin" ? "bg-blue-600 text-white hover:bg-blue-700" : "border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"}`}
+                onClick={() => setMode("superadmin")}
               >
-                <Chrome className="h-5 w-5 text-gray-600" />
-                <span>Iniciar sesión con Google</span>
+                <Crown className="mr-2 h-4 w-4" /> Super Admin
               </Button>
-              <p className="mt-2 text-center text-sm text-muted-foreground">
-                ¿No tienes una cuenta?{" "}
-                <Link href="/auth/register" className="text-primary hover:underline">
-                  Regístrate
-                </Link>
-              </p>
-            </CardFooter>
-          </form>
-        </Card>
-      </div>
+              <Button
+                variant={mode === "empleado" ? "default" : "outline"}
+                className={`flex-1 mx-1 ${mode === "empleado" ? "bg-blue-600 text-white hover:bg-blue-700" : "border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"}`}
+                onClick={() => setMode("empleado")}
+              >
+                <Shield className="mr-2 h-4 w-4" /> Empleado
+              </Button>
+            </div>
+            {mode === "superadmin" && (
+              <p className="text-center text-sm text-gray-600">Crea y gestiona tu empresa (solo Google)</p>
+            )}
+            {mode === "empleado" && (
+              <p className="text-center text-sm text-gray-600">Vende y crece (correo y contraseña)</p>
+            )}
+          </div>
+
+          {mode === "superadmin" ? (
+            <div className="space-y-4">
+              <Button onClick={handleGoogleLogin} variant="outline" className="w-full flex gap-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white" disabled={loading}>
+                <Chrome className="h-5 w-5" /> Iniciar con Google
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleEmailPasswordLogin} className="space-y-4">
+              <div>
+                <Label htmlFor="email" className="text-gray-700">Correo</Label>
+                <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} required className="border-gray-300 focus:ring-blue-600" />
+              </div>
+              <div>
+                <Label htmlFor="password" className="text-gray-700">Contraseña</Label>
+                <Input id="password" name="password" type="password" value={formData.password} onChange={handleChange} required className="border-gray-300 focus:ring-blue-600" />
+              </div>
+              <Button type="submit" disabled={loading} className="w-full bg-blue-600 text-white hover:bg-blue-700">
+                {loading ? "Iniciando..." : "Ingresar"}
+              </Button>
+            </form>
+          )}
+
+          <div className="mt-4 text-center text-sm">
+            <Link href="/" className="text-blue-600 hover:underline">← Volver</Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

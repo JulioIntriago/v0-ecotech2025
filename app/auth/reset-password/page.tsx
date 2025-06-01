@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound } from "lucide-react";
+import Header from "@/components/Header";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
@@ -24,7 +24,7 @@ export default function ResetPasswordPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`, // Asegúrate de crear esta página si la necesitas
+        redirectTo: `${window.location.origin}/auth/update-password`,
       });
 
       if (error) throw error;
@@ -38,53 +38,49 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center">
-            <KeyRound className="h-12 w-12 text-primary" />
-          </div>
-          <CardTitle className="text-2xl">Recuperar contraseña</CardTitle>
-          <CardDescription>Ingresa tu correo electrónico para recibir un enlace de recuperación</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {success && (
-            <Alert className="mb-4 border-success bg-success/10">
-              <AlertDescription className="text-success">
-                Se ha enviado un enlace de recuperación a tu correo electrónico.
-              </AlertDescription>
-            </Alert>
-          )}
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Correo electrónico</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="tu@correo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+    <div className="min-h-screen bg-muted/40">
+      <Header />
+      <div className="flex items-center justify-center py-12 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-2 text-center">
+            <div className="flex justify-center">
+              <KeyRound className="h-12 w-12 text-primary" />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Enviando..." : "Enviar enlace de recuperación"}
-            </Button>
-          </form>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            <Link href="/auth/login" className="text-primary hover:underline">
-              Volver al inicio de sesión
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+            <CardTitle className="text-2xl">Recuperar contraseña</CardTitle>
+            <CardDescription>Ingresa tu correo electrónico para recibir un enlace de recuperación</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {success && (
+              <Alert className="mb-4 border-success bg-success/10">
+                <AlertDescription className="text-success">
+                  Se ha enviado un enlace de recuperación a tu correo electrónico.
+                </AlertDescription>
+              </Alert>
+            )}
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Correo electrónico</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="tu@correo.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Enviando..." : "Enviar enlace de recuperación"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
