@@ -13,20 +13,21 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { v4 as uuidv4 } from "uuid";
 
 export default function NuevoEmpleadoPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     nombre: "",
     cedula: "",
-    role: "", // Ajustado de cargo 
+    role: "",
     departamento: "",
     telefono: "",
     correo: "",
     direccion: "",
     supervisor: "",
     horario: "",
-    password: "", // Nuevo campo para contraseña
+    password: "",
   });
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -34,21 +35,23 @@ export default function NuevoEmpleadoPage() {
   useEffect(() => {
     const checkUserRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user && user.user_metadata?.role === "admin") {
-        setIsAdmin(true);
-      } else {
-        toast({ title: "Acceso Denegado", description: "Solo los administradores pueden crear empleados.", variant: "destructive" });
-        router.push("/dashboard");
+      if (user) {
+        const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single();
+        if (userData?.role === "admin") {
+          setIsAdmin(true);
+        } else {
+          toast({ title: "Acceso Denegado", description: "Solo los administradores pueden crear empleados.", variant: "destructive" });
+          router.push("/dashboard");
+        }
       }
     };
     checkUserRole();
   }, [router]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [e.target.name]: e.target.value,
     }));
   };
 
@@ -67,40 +70,29 @@ export default function NuevoEmpleadoPage() {
     try {
       // Validar campos obligatorios
       if (!formData.correo || !formData.nombre || !formData.cedula || !formData.role || !formData.departamento || !formData.telefono || !formData.password) {
-        toast({
-          title: "Error",
-          description: "Por favor, completa todos los campos obligatorios, incluyendo la contraseña.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+        throw new Error("Por favor, completa todos los campos obligatorios, incluyendo la contraseña.");
+      }
+
+      // Validar contraseña segura
+      if (formData.password.length < 8) {
+        throw new Error("La contraseña debe tener al menos 8 caracteres.");
       }
 
       // Crear usuario en auth.users
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: formData.correo,
         password: formData.password,
-        options: {
-          data: {
-            role: formData.role,
-            nombre: formData.nombre,
-            cedula: formData.cedula,
-            email_verified: false,
-            phone_verified: false,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        email_confirm: true,
+        user_metadata: {
+          nombre: formData.nombre,
+          role: formData.role,
+          cedula: formData.cedula,
         },
       });
 
       if (authError) {
         if (authError.status === 429) {
-          toast({
-            title: "Error",
-            description: "Demasiadas solicitudes. Por favor, espera un momento y vuelve a intentarlo.",
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
+          throw new Error("Demasiadas solicitudes. Por favor, espera un momento.");
         }
         throw authError;
       }
@@ -108,13 +100,29 @@ export default function NuevoEmpleadoPage() {
 
       const userId = authData.user.id;
 
-      // Guardar el nuevo empleado
+      // Insertar en users
+      const { error: userError } = await supabase.from("users").insert({
+        id: userId,
+        email: formData.correo,
+        role: formData.role,
+        nombre: formData.nombre,
+        cedula: formData.cedula,
+        telefono: formData.telefono,
+        created_at: new Date().toISOString(),
+      });
+
+      if (userError) {
+        await supabase.auth.admin.deleteUser(userId);
+        throw userError;
+      }
+
+      // Insertar en empleados
       const { error: insertError } = await supabase.from("empleados").insert({
-        id: userId, // Usamos el ID de auth.users directamente
+        id: uuidv4(),
         user_id: userId,
         nombre: formData.nombre,
         cedula: formData.cedula,
-        role: formData.role, // Ajustado de cargo a role
+        role: formData.role,
         departamento: formData.departamento,
         telefono: formData.telefono,
         correo: formData.correo,
@@ -127,29 +135,35 @@ export default function NuevoEmpleadoPage() {
 
       if (insertError) {
         await supabase.auth.admin.deleteUser(userId);
+        await supabase.from("users").delete().eq("id", userId);
         throw insertError;
       }
 
-      // Enviar correo de bienvenida con la contraseña
-      await fetch("https://<tu-supabase-url>/functions/v1/send-welcome-email", {
+      // Enviar correo con nodemailer (se configura en Paso 2)
+      const response = await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: formData.correo,
-          message: `Bienvenido a ECOTECH. Tu contraseña temporal es: ${formData.password}. Por favor, cámbiala al iniciar sesión.`,
+          to: formData.correo,
+          subject: "Bienvenido a Eco_Tech",
+          text: `Bienvenido a Eco_Tech, ${formData.nombre}. Tu correo es ${formData.correo} y tu contraseña temporal es: ${formData.password}. Inicia sesión en ${window.location.origin}/auth/login y cambia tu contraseña.`,
         }),
       });
 
+      if (!response.ok) {
+        throw new Error("No se pudo enviar el correo de bienvenida.");
+      }
+
       toast({
         title: "Empleado creado",
-        description: "El empleado ha sido creado y se ha enviado un email con su contraseña temporal.",
+        description: "El empleado ha sido creado y se ha enviado un correo con sus credenciales.",
       });
 
       router.push("/dashboard/empleados");
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "No se pudo crear el empleado: " + error.message,
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -192,11 +206,11 @@ export default function NuevoEmpleadoPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="cedula">Cédula / Documento de Identidad</Label>
+                <Label htmlFor="cedula">Cédula</Label>
                 <Input
                   id="cedula"
                   name="cedula"
-                  placeholder="Número de cédula o documento"
+                  placeholder="Número de cédula"
                   value={formData.cedula}
                   onChange={handleChange}
                   required
@@ -213,7 +227,6 @@ export default function NuevoEmpleadoPage() {
                     <SelectContent>
                       <SelectItem value="tecnico">Técnico</SelectItem>
                       <SelectItem value="vendedor">Vendedor</SelectItem>
-                      <SelectItem value="admin">Administrador</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -248,7 +261,7 @@ export default function NuevoEmpleadoPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="correo">Correo Electrónico</Label>
+                  <Label htmlFor="correo">Correo</Label>
                   <Input
                     id="correo"
                     name="correo"

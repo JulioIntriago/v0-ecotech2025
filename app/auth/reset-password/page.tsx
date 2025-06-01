@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound } from "lucide-react";
-import Header from "@/components/Header";
+import { toast } from "@/components/ui/use-toast";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
@@ -26,61 +26,57 @@ export default function ResetPasswordPage() {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/update-password`,
       });
-
       if (error) throw error;
 
       setSuccess(true);
+      toast({ title: "Correo enviado", description: "Revisa tu bandeja de entrada para el enlace de recuperación." });
     } catch (error: any) {
       setError(error.message || "Error al enviar el correo de recuperación");
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-muted/40">
-      <Header />
-      <div className="flex items-center justify-center py-12 px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-2 text-center">
-            <div className="flex justify-center">
-              <KeyRound className="h-12 w-12 text-primary" />
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-2 text-center">
+          <KeyRound className="h-12 w-12 mx-auto text-primary" />
+          <CardTitle>Recuperar Contraseña</CardTitle>
+          <CardDescription>Ingresa tu correo para recibir un enlace de recuperación</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {success && (
+            <Alert className="border-green-500 bg-green-50">
+              <AlertDescription className="text-green-700">
+                Enlace de recuperación enviado a tu correo.
+              </AlertDescription>
+            </Alert>
+          )}
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Correo Electrónico</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="tu@correo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
-            <CardTitle className="text-2xl">Recuperar contraseña</CardTitle>
-            <CardDescription>Ingresa tu correo electrónico para recibir un enlace de recuperación</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {success && (
-              <Alert className="mb-4 border-success bg-success/10">
-                <AlertDescription className="text-success">
-                  Se ha enviado un enlace de recuperación a tu correo electrónico.
-                </AlertDescription>
-              </Alert>
-            )}
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Correo electrónico</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="tu@correo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Enviando..." : "Enviar enlace de recuperación"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Enviando..." : "Enviar Enlace"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

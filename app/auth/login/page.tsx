@@ -2,17 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth } from "@/lib/firebase";
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Chrome } from "lucide-react";
+import { Chrome, Crown, Shield } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import Link from "next/link";
-import { Crown, Shield } from "lucide-react";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"superadmin" | "empleado">("superadmin");
@@ -28,19 +25,19 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
-      const user = userCredential.user;
+      if (mode !== "empleado") throw new Error("Solo empleados pueden usar correo/contraseña");
 
-      if (!user.emailVerified) {
-        router.push("/auth/verification");
-        return;
-      }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
+      if (error) throw error;
 
-      const { data: userData } = await supabase.from("users").select("role").eq("id", user.uid).single();
-      if (!userData) throw new Error("Usuario no encontrado");
+      if (!data.user?.id) throw new Error("No se pudo obtener el ID del usuario");
 
-      if (!["tecnico", "vendedor"].includes(userData.role)) {
-        throw new Error("Acceso denegado. Solo empleados pueden iniciar sesión con correo y contraseña.");
+      const { data: userData } = await supabase.from("users").select("role").eq("id", data.user.id).single();
+      if (!userData || !["tecnico", "vendedor"].includes(userData.role)) {
+        throw new Error("Acceso denegado. Solo empleados pueden iniciar sesión.");
       }
 
       toast({ title: "Inicio de sesión exitoso", description: "Redirigiendo..." });
@@ -55,26 +52,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      const user = userCredential.user;
+      if (mode !== "superadmin") throw new Error("Solo el Super Admin puede usar Google");
 
-      const { data: existingUser } = await supabase.from("users").select("*").eq("id", user.uid).single();
-      if (!existingUser) {
-        throw new Error("Usuario no registrado. Contacta al administrador.");
-      }
-
-      if (!user.emailVerified) {
-        router.push("/auth/verification");
-        return;
-      }
-
-      if (existingUser.role !== "admin") {
-        throw new Error("Acceso denegado. Solo el Super Admin puede iniciar sesión con Google.");
-      }
-
-      toast({ title: "Inicio de sesión exitoso", description: "Redirigiendo..." });
-      router.push("/dashboard");
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (error) throw error;
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -86,8 +70,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-gray-800">Eco_Tech - Acceso</CardTitle>
-          <p className="text-sm text-gray-600">Iniciar sesión como equipo</p>
+          <CardTitle className="text-2xl font-bold text-gray-800">Login Ecotech</CardTitle>
+          <p className="text-sm text-gray-600">Inicia sesión</p>
         </CardHeader>
         <CardContent>
           <div className="mb-6">
@@ -108,10 +92,10 @@ export default function LoginPage() {
               </Button>
             </div>
             {mode === "superadmin" && (
-              <p className="text-center text-sm text-gray-600">Crea y gestiona tu empresa (solo Google)</p>
+              <p className="text-center text-sm text-gray-600">Crea y gestiona tu empresa</p>
             )}
             {mode === "empleado" && (
-              <p className="text-center text-sm text-gray-600">Vende y crece (correo y contraseña)</p>
+              <p className="text-center text-sm text-gray-600">Vende y crece</p>
             )}
           </div>
 

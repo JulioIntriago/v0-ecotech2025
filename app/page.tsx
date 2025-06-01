@@ -321,64 +321,7 @@ export default function LandingPage() {
                 <p className="text-gray-600">contacto@ecotech.com</p>
               </Card>
             </div>
-            <div className="mt-12">
-              <Card className="mx-auto max-w-md p-6 rounded-lg border border-gray-200 hover-scale">
-                <h3 className="text-xl font-bold mb-4 text-gray-800">Envíanos tu Mensaje</h3>
-                <form onSubmit={handleContact} className="space-y-6">
-                  <div>
-                    <Label htmlFor="nombre" className="text-sm font-medium text-gray-700">Nombre</Label>
-                    <Input
-                      id="nombre"
-                      name="nombre"
-                      value={contactForm.nombre}
-                      onChange={(e) => setContactForm({ ...contactForm, nombre: e.target.value })}
-                      placeholder="Ej. Juan Pérez"
-                      required
-                      className="mt-2 border-gray-300 focus:ring-blue-600"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="telefono" className="text-sm font-medium text-gray-700">Teléfono</Label>
-                    <Input
-                      id="telefono"
-                      name="telefono"
-                      value={contactForm.telefono}
-                      onChange={(e) => setContactForm({ ...contactForm, telefono: e.target.value })}
-                      placeholder="Ej. 555-123-4567"
-                      className="mt-2 border-gray-300 focus:ring-blue-600"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email" className="text-sm font-medium text-gray-700">Correo</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={contactForm.email}
-                      onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                      placeholder="Ej. juan@example.com"
-                      required
-                      className="mt-2 border-gray-300 focus:ring-blue-600"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="mensaje" className="text-sm font-medium text-gray-700">Mensaje</Label>
-                    <Textarea
-                      id="mensaje"
-                      name="mensaje"
-                      value={contactForm.mensaje}
-                      onChange={(e) => setContactForm({ ...contactForm, mensaje: e.target.value })}
-                      placeholder="Escribe tu mensaje aquí"
-                      required
-                      className="mt-2 h-24 border-gray-300 focus:ring-blue-600"
-                    />
-                  </div>
-                  <Button type="submit" disabled={loading} className="w-full mt-4 bg-blue-600 hover:bg-blue-700 hover-button">
-                    {loading ? "Enviando..." : "Enviar"}
-                  </Button>
-                </form>
-              </Card>
-            </div>
+           
           </div>
         </section>
       </main>

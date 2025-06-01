@@ -3,73 +3,36 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
-import Header from "@/components/Header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function CallbackPage() {
+export default function AuthCallback() {
   const router = useRouter();
 
   useEffect(() => {
     const handleCallback = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Error en callback:", error.message);
-        toast({
-          title: "Error",
-          description: "Error al procesar la autenticación con Google",
-          variant: "destructive",
-        });
-        router.push("/auth/login");
-        return;
-      }
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
 
-      if (data.session) {
-        const user = data.session.user;
-        const { data: existingUser } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (!existingUser) {
-          const { data: adminCheck } = await supabase
+        if (data.session) {
+          const { data: userData } = await supabase
             .from("users")
             .select("role")
-            .eq("role", "admin")
-            .limit(1);
+            .eq("id", data.session.user.id)
+            .single();
 
-          const isInitialSetup = !adminCheck || adminCheck.length === 0;
-          const role = isInitialSetup ? "admin" : "cliente";
-
-          const { error: insertError } = await supabase.from("users").insert({
-            id: user.id,
-            email: user.email,
-            nombre: user.user_metadata.full_name || "Usuario",
-            role,
-            telefono: "",
-            cedula: "",
-            created_at: new Date().toISOString(),
-          });
-
-          if (insertError) {
-            console.error("Error al insertar usuario:", insertError.message);
-            toast({
-              title: "Error",
-              description: "Error al registrar usuario en la base de datos",
-              variant: "destructive",
-            });
-            router.push("/auth/login");
-            return;
+          if (!userData || userData.role !== "admin") {
+            throw new Error("Acceso denegado. Solo el Super Admin puede iniciar sesión con Google.");
           }
-        }
 
-        toast({
-          title: "Inicio de sesión exitoso",
-          description: "Redirigiendo al dashboard...",
-        });
-        router.push("/dashboard");
-      } else {
+          toast({ title: "Inicio de sesión exitoso", description: "Redirigiendo..." });
+          router.push("/dashboard");
+        } else {
+          throw new Error("No se pudo autenticar.");
+        }
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
         router.push("/auth/login");
       }
     };
@@ -78,18 +41,15 @@ export default function CallbackPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-muted">
-      <Header />
-      <div className="flex items-center justify-center py-12 px-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="text-center space-y-4">
-              <h1 className="text-2xl font-bold">Procesando autenticación...</h1>
-              <p className="text-sm text-muted-foreground">Esto puede tomar un momento.</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Procesando Autenticación</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Cargando...</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

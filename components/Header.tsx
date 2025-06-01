@@ -52,12 +52,6 @@ export default function Header() {
           >
             Contacto
           </Link>
-          <Link href="/auth/login" className="text-sm font-medium hover:text-blue-200 transition-colors">
-            Iniciar Sesión
-          </Link>
-          <Link href="/auth/register" className="text-sm font-medium hover:text-blue-200 transition-colors">
-            Registrarse
-          </Link>
         </nav>
       </div>
     </header>
