@@ -17,7 +17,7 @@ El propósito de Ecotech es brindar herramientas digitales que optimicen proceso
 - Implementación CI/CD mediante Vercel
 
 # Clonar repositorio
-git clone https://github.com/tuusuario/ecotech.git
+git clone https://github.com/JulioIntriago/v0-ecotech2025.git
 cd ecotech
 
 # Instalar dependencias
@@ -31,5 +31,5 @@ npm run dev
 
 Puedes ver la versión en línea del proyecto aquí:
 
-🔗 
+🔗 https://ecotech2025.vercel.app
 
