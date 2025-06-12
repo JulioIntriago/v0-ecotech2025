@@ -20,7 +20,7 @@ export default function NuevoClientePage() {
     nombre: "",
     cedula: "",
     telefono: "",
-    correo: "",
+    email: "",
     direccion: "",
     notas: "",
   });
@@ -43,7 +43,7 @@ export default function NuevoClientePage() {
         nombre: formData.nombre,
         cedula: formData.cedula,
         telefono: formData.telefono,
-        correo: formData.correo || null,
+        email: formData.email || null,
         direccion: formData.direccion || null,
         notas: formData.notas || null,
       });
@@ -117,13 +117,13 @@ export default function NuevoClientePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="correo">Correo Electrónico</Label>
+                  <Label htmlFor="email">Correo Electrónico</Label>
                   <Input
-                    id="correo"
+                    id="email"
                     name="correo"
                     type="email"
                     placeholder="correo@ejemplo.com"
-                    value={formData.correo}
+                    value={formData.email}
                     onChange={handleChange}
                   />
                 </div>

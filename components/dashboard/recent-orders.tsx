@@ -12,18 +12,32 @@ import { DateRange } from "react-day-picker";
 
 interface RecentOrdersProps {
   dateRange?: DateRange;
+  empresaId: number; // Aseguramos que empresaId esté en las props
 }
 
-export function RecentOrders({ dateRange }: RecentOrdersProps) {
-  const [orders, setOrders] = useState<any[]>([]);
+interface Order {
+  id: number;
+  numero_orden: string;
+  cliente_id: number;
+  equipo_id: number;
+  estado: string;
+  created_at: string;
+  equipo_marca?: string;
+  equipo_modelo?: string;
+  cliente_nombre?: string;
+}
+
+export function RecentOrders({ dateRange, empresaId }: RecentOrdersProps) {
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         let query = supabase
-          .from("ordenes")
+          .from("ordenes_trabajo") // Ajustamos el nombre de la tabla a "ordenes_trabajo"
           .select("*")
+          .eq("empresa_id", empresaId) // Filtramos por empresa_id
           .order("created_at", { ascending: false })
           .limit(5);
 
@@ -41,17 +55,19 @@ export function RecentOrders({ dateRange }: RecentOrdersProps) {
         } else {
           // Obtener datos de equipos y clientes para cada orden
           const ordersWithDetails = await Promise.all(
-            (data || []).map(async (order) => {
+            (data || []).map(async (order: Order) => {
               const { data: equipmentData, error: equipmentError } = await supabase
                 .from("equipos")
                 .select("marca, modelo")
                 .eq("id", order.equipo_id)
+                .eq("empresa_id", empresaId) // Filtramos equipos por empresa_id
                 .single();
 
               const { data: clientData, error: clientError } = await supabase
                 .from("clientes")
                 .select("nombre")
                 .eq("id", order.cliente_id)
+                .eq("empresa_id", empresaId) // Filtramos clientes por empresa_id
                 .single();
 
               if (equipmentError) console.error("Error fetching equipment for order", order.id, ":", equipmentError);
@@ -76,7 +92,7 @@ export function RecentOrders({ dateRange }: RecentOrdersProps) {
     };
 
     fetchOrders();
-  }, [dateRange]); // Dependencia en dateRange para recargar cuando cambie
+  }, [dateRange, empresaId]); // Añadimos empresaId como dependencia
 
   if (loading) return <div className="p-6">Cargando órdenes...</div>;
 

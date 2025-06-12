@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -5,31 +7,63 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
-export function InventoryStatus() {
-  const [inventory, setInventory] = useState<any[]>([]);
+interface InventoryStatusProps {
+  empresaId: number; // Aseguramos que empresaId esté en las props
+}
+
+interface InventoryItem {
+  id: number;
+  nombre: string;
+  categoria_id: number;
+  precio: number;
+  stock: number;
+  stock_minimo: number;
+  categoria?: string;
+  estado?: string;
+}
+
+export function InventoryStatus({ empresaId }: InventoryStatusProps) {
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchInventory = async () => {
       const { data, error } = await supabase
-        .from("inventario")
+        .from("productos") // Ajustamos el nombre de la tabla a "productos"
         .select("id, nombre, categoria_id, precio, stock, stock_minimo")
+        .eq("empresa_id", empresaId) // Filtramos por empresa_id
         .limit(5);
-      if (error) console.error("Error fetching inventory:", error);
-      else {
+
+      if (error) {
+        console.error("Error fetching inventory:", error);
+      } else {
         const inventoryWithCategories = await Promise.all(
-          (data || []).map(async (item) => ({
-            ...item,
-            categoria: (await supabase.from("categorias_productos").select("nombre").eq("id", item.categoria_id).single()).data?.nombre || "Sin categoría",
-            estado: item.stock <= item.stock_minimo ? "Bajo" : "Normal",
-          }))
+          (data || []).map(async (item: InventoryItem) => {
+            const { data: categoryData, error: categoryError } = await supabase
+              .from("categorias_productos")
+              .select("nombre")
+              .eq("id", item.categoria_id)
+              .eq("empresa_id", empresaId) // Filtramos categorías por empresa_id
+              .single();
+
+            if (categoryError) {
+              console.error("Error fetching category for item", item.id, ":", categoryError);
+            }
+
+            return {
+              ...item,
+              categoria: categoryData?.nombre || "Sin categoría",
+              estado: item.stock <= item.stock_minimo ? "Bajo" : "Normal",
+            };
+          })
         );
         setInventory(inventoryWithCategories);
       }
       setLoading(false);
     };
+
     fetchInventory();
-  }, []);
+  }, [empresaId]); // Añadimos empresaId como dependencia
 
   if (loading) return <div className="p-6">Cargando inventario...</div>;
 

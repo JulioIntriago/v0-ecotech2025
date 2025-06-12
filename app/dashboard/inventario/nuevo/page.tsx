@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { ArrowLeft } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ArrowLeft } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";
 
 const proveedores = [
   { id: "PROV-001", nombre: "TechParts Inc." },
@@ -22,83 +22,87 @@ const proveedores = [
   { id: "PROV-003", nombre: "ElectroSupply" },
   { id: "PROV-004", nombre: "ScreenGuard" },
   { id: "PROV-005", nombre: "CaseMakers" },
-]
+];
 
-const categorias = ["Repuestos", "Accesorios", "Cables", "Audio", "Baterías", "Protectores", "Fundas", "Otros"]
+const categorias = [
+  { id: 1, nombre: "Repuestos" },
+  { id: 2, nombre: "Accesorios" },
+  { id: 3, nombre: "Cables" },
+  { id: 4, nombre: "Audio" },
+  { id: 5, nombre: "Baterías" },
+  { id: 6, nombre: "Protectores" },
+  { id: 7, nombre: "Fundas" },
+  { id: 8, nombre: "Otros" },
+];
 
 export default function NuevoProductoPage() {
-  const router = useRouter()
+  const router = useRouter();
   const [formData, setFormData] = useState({
     nombre: "",
     categoria: "",
     descripcion: "",
     precio_compra: "",
     precio_venta: "",
-    stock: "", // Cambiado de 'cantidad' a 'stock'
+    stock: "",
     stock_minimo: "",
     ubicacion: "",
     proveedor_id: "",
-  })
-  const [loading, setLoading] = useState(false)
+  });
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-  }
+    }));
+  };
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-  }
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
     try {
-      // Validar campos numéricos
       const parsedData = {
         nombre: formData.nombre,
-        categoria_id: formData.categoria, // Usamos 'categoria' como categoría_id
         descripcion: formData.descripcion,
-        precio_compra: parseFloat(formData.precio_compra) || 0,
-        precio: parseFloat(formData.precio_venta) || 0, // 'precio' es el precio de venta en la tabla
-        stock: parseInt(formData.stock, 10) || 0, // Cambiado de 'cantidad' a 'stock'
+        precio: parseFloat(formData.precio_venta) || 0,
+        stock: parseInt(formData.stock, 10) || 0,
         stock_minimo: parseInt(formData.stock_minimo, 10) || 0,
-        ubicacion: formData.ubicacion,
-        proveedor_id: formData.proveedor_id,
+        categoria_id: formData.categoria,
+      };
+
+      if (!parsedData.nombre) {
+        throw new Error("Por favor completa el campo obligatorio (Nombre).");
       }
 
-      if (!parsedData.nombre || !parsedData.categoria_id || !parsedData.proveedor_id) {
-        throw new Error("Por favor completa los campos obligatorios (Nombre, Categoría, Proveedor).")
-      }
+      const { error } = await supabase.from("productos").insert([parsedData]);
 
-      // Guardar en Supabase
-      const { error } = await supabase.from("inventario").insert([parsedData])
-
-      if (error) throw error
+      if (error) throw error;
 
       toast({
         title: "Producto creado",
         description: "El producto ha sido creado correctamente.",
-      })
+      });
 
-      router.push("/dashboard/inventario")
+      router.push("/dashboard/inventario");
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "No se pudo crear el producto.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -137,9 +141,9 @@ export default function NuevoProductoPage() {
                       <SelectValue placeholder="Selecciona una categoría" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categorias.map((categoria) => (
-                        <SelectItem key={categoria} value={categoria}>
-                          {categoria}
+                      {categorias.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id.toString()}>
+                          {cat.nombre}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -216,10 +220,10 @@ export default function NuevoProductoPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="stock">Stock Inicial</Label> {/* Cambiado de 'Cantidad Inicial' a 'Stock Inicial' */}
+                  <Label htmlFor="stock">Stock Inicial</Label>
                   <Input
                     id="stock"
-                    name="stock" // Cambiado de 'cantidad' a 'stock'
+                    name="stock"
                     type="number"
                     min="0"
                     value={formData.stock}
@@ -265,5 +269,5 @@ export default function NuevoProductoPage() {
         </div>
       </form>
     </div>
-  )
+  );
 }

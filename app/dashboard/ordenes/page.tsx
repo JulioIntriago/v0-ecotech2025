@@ -44,14 +44,20 @@ export default function OrdenesPage() {
     const fetchOrders = async () => {
       try {
         const { data, error } = await supabase
-          .from("ordenes")
-          .select("*")
-          .order("created_at", { ascending: false });
+  .from("ordenes")
+  .select(`*`)
+  .order("fecha_ingreso", { ascending: false });
+
 
         if (error) {
-          console.error("Error fetching orders:", error);
-        } else {
-          setOrders(data || []);
+          console.error('Supabase error details:', error);
+throw new Error(`Error fetching orders: ${error.message || JSON.stringify(error)}`);        } else {
+          const formattedData = data.map((orden) => ({
+            ...orden,
+            cliente_nombre: orden.clientes?.nombre || "Sin cliente",
+            tecnico_asignado: orden.tecnicos?.nombre || "Sin asignar",
+          }));
+          setOrders(formattedData || []);
         }
       } catch (error) {
         console.error("General error fetching orders:", error);
@@ -61,19 +67,6 @@ export default function OrdenesPage() {
     };
 
     fetchOrders();
-
-    // Suscripción en tiempo real (opcional, descomenta si lo deseas)
-    // const channel = supabase
-    //   .channel("ordenes-changes")
-    //   .on("postgres_changes", { event: "*", schema: "public", table: "ordenes" }, (payload) => {
-    //     fetchOrders(); // Recarga las órdenes cuando haya cambios
-    //   })
-    //   .subscribe();
-
-    // Limpieza de la suscripción (descomenta si usas la suscripción)
-    // return () => {
-    //   supabase.removeChannel(channel);
-    // };
   }, []);
 
   // Filtrar órdenes según búsqueda y estado
@@ -160,12 +153,14 @@ export default function OrdenesPage() {
                     <TableCell className="font-medium">{orden.id}</TableCell>
                     <TableCell>{orden.cliente_nombre}</TableCell>
                     <TableCell className="hidden md:table-cell">{orden.dispositivo}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{orden.problema}</TableCell>fecha_ingreso 
+                    <TableCell className="hidden lg:table-cell">{orden.problema}</TableCell>
                     <TableCell>
                       <Badge variant={getVariantForEstado(orden.estado)}>{traducirEstado(orden.estado)}</Badge>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">{orden.created_at}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{orden.tecnico_asignado || "Sin asignar"}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {new Date(orden.fecha_ingreso).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">{orden.tecnico_asignado}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/dashboard/ordenes/${orden.id}`}>Ver detalles</Link>

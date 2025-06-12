@@ -1,181 +1,178 @@
-"use client"
+// app/dashboard/empleados/page.tsx
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Phone, Mail } from "lucide-react"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search, Phone, Mail } from "lucide-react";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@/components/ui/use-toast";
 
-// Datos de ejemplo para empleados
-const empleados = [
-  {
-    id: "EMP-001",
-    nombre: "Carlos Ruiz",
-    cargo: "Técnico",
-    telefono: "555-123-4567",
-    correo: "carlos.ruiz@ecotech.com",
-    fecha_contratacion: "2022-01-15",
-    ordenes_asignadas: 5,
-    estado: "activo",
-  },
-  {
-    id: "EMP-002",
-    nombre: "Laura Méndez",
-    cargo: "Técnico",
-    telefono: "555-987-6543",
-    correo: "laura.mendez@ecotech.com",
-    fecha_contratacion: "2022-03-10",
-    ordenes_asignadas: 3,
-    estado: "activo",
-  },
-  {
-    id: "EMP-003",
-    nombre: "Roberto Díaz",
-    cargo: "Técnico",
-    telefono: "555-456-7890",
-    correo: "roberto.diaz@ecotech.com",
-    fecha_contratacion: "2022-05-20",
-    ordenes_asignadas: 0,
-    estado: "inactivo",
-  },
-  {
-    id: "EMP-004",
-    nombre: "Ana Gómez",
-    cargo: "Vendedor",
-    telefono: "555-234-5678",
-    correo: "ana.gomez@ecotech.com",
-    fecha_contratacion: "2022-02-15",
-    ordenes_asignadas: 0,
-    estado: "activo",
-  },
-  {
-    id: "EMP-005",
-    nombre: "Miguel Torres",
-    cargo: "Vendedor",
-    telefono: "555-876-5432",
-    correo: "miguel.torres@ecotech.com",
-    fecha_contratacion: "2022-04-05",
-    ordenes_asignadas: 0,
-    estado: "activo",
-  },
-  {
-    id: "EMP-006",
-    nombre: "Lucía Martínez",
-    cargo: "Administrador",
-    telefono: "555-345-6789",
-    correo: "lucia.martinez@ecotech.com",
-    fecha_contratacion: "2021-11-10",
-    ordenes_asignadas: 0,
-    estado: "activo",
-  },
-]
+type Empleado = {
+  id: string;
+  nombre: string;
+  cedula: string;
+  rol: string;
+  telefono: string;
+  email: string;
+  fecha_contratacion: string;
+  estado: string;
+};
 
 export default function EmpleadosPage() {
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filtrar empleados según búsqueda
-  const empleadosFiltrados = empleados.filter(
-    (empleado) =>
-      empleado.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      empleado.cargo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      empleado.telefono.includes(searchQuery) ||
-      empleado.correo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      empleado.id.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  useEffect(() => {
+    async function fetchEmpleados() {
+      try {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData.user) {
+          throw new Error("Usuario no autenticado");
+        }
+
+        const { data: usuario, error: usuarioError } = await supabase
+          .from("usuarios")
+          .select("empresa_id")
+          .eq("id", userData.user.id)
+          .single();
+
+        if (usuarioError || !usuario) {
+          throw new Error("No se encontró el usuario en la tabla usuarios");
+        }
+
+        const empresaId = usuario.empresa_id;
+
+        const { data, error } = await supabase
+          .from("empleados_con_empresa")
+          .select("id, nombre, cedula, rol, telefono, email, fecha_contratacion, estado")
+          .eq("empresa_id", empresaId);
+
+        if (error) {
+          throw new Error(`Error al obtener empleados: ${error.message}`);
+        }
+
+        setEmpleados(data || []);
+      } catch (err: any) {
+        console.error("Error en fetchEmpleados:", err);
+        setError(err.message);
+        toast({
+          title: "Error",
+          description: err.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchEmpleados();
+  }, []);
+
+  const empleadosFiltrados = empleados.filter(emp =>
+    [emp.nombre, emp.cedula, emp.rol, emp.telefono, emp.email].some(f =>
+      f?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  );
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="p-6 flex flex-col gap-6">
       <DashboardHeader />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Empleados</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h2 className="text-2xl font-bold">Empleados</h2>
         <Button asChild>
-          <Link href="/dashboard/empleados/nuevo">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Empleado
+          <Link href="/dashboard/empleados">
+            <Plus className="mr-2" /> Nuevo Empleado
           </Link>
         </Button>
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar por nombre, cargo, teléfono, correo o ID..."
-            className="w-full pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      <div className="relative">
+        <Search className="absolute left-3 text-gray-3 top-3 text-gray-400" />
+        <Input
+          type="search"
+          placeholder="Buscar..."
+          className="pl-10"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Directorio de Empleados</CardTitle>
-          <CardDescription>Gestiona la información de tu equipo de trabajo</CardDescription>
+          <CardTitle>Directorio de empleados</CardTitle>
+          <CardDescription>
+            {loading
+              ? "Cargando..."
+              : error
+                ? "Error al cargar empleados"
+                : `${empleadosFiltrados.length} empleados encontrados`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Empleado</TableHead>
-                <TableHead>Cargo</TableHead>
-                <TableHead className="hidden md:table-cell">Contacto</TableHead>
-                <TableHead className="hidden lg:table-cell">Fecha Contratación</TableHead>
-                <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {empleadosFiltrados.length === 0 ? (
+          {error ? (
+            <div className="text-red-600 text-center py-4">{error}</div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
-                    No se encontraron empleados que coincidan con los criterios de búsqueda.
-                  </TableCell>
+                  <TableHead>Nombre / ID</TableHead>
+                  <TableHead>Cédula</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead className="hidden md:table-cell">Contacto</TableHead>
+                  <TableHead className="text-center">Estado</TableHead>
                 </TableRow>
-              ) : (
-                empleadosFiltrados.map((empleado) => (
-                  <TableRow key={empleado.id}>
+              </TableHeader>
+              <TableBody>
+                {empleadosFiltrados.map(emp => (
+                  <TableRow key={emp.id}>
                     <TableCell>
-                      <div className="font-medium">{empleado.nombre}</div>
-                      <div className="text-sm text-muted-foreground">{empleado.id}</div>
+                      <div className="font-medium">{emp.nombre}</div>
+                      <div className="text-sm text-gray-500">{emp.id}</div>
                     </TableCell>
-                    <TableCell>{empleado.cargo}</TableCell>
+                    <TableCell>{emp.cedula || '-'}</TableCell>
+                    <TableCell>{emp.rol || '-'}</TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <div className="flex flex-col">
-                        <div className="flex items-center">
-                          <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
-                          {empleado.telefono}
-                        </div>
-                        <div className="flex items-center">
-                          <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
-                          {empleado.correo}
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                        {emp.telefono || '-'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        {emp.email || '-'}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">{empleado.fecha_contratacion}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={empleado.estado === "activo" ? "success" : "secondary"}>
-                        {empleado.estado === "activo" ? "Activo" : "Inactivo"}
+                      <Badge variant={emp.estado === "activo" ? "success" : "secondary"}>
+                        {emp.estado === "activo" ? "Activo" : "Inactivo"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/dashboard/empleados/${empleado.id}`}>Ver detalles</Link>
-                      </Button>
+                  </TableRow>
+                ))}
+                {!empleadosFiltrados.length && !loading && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4">
+                      No hay empleados que coincidan.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash } from "lucide-react"; // Añadimos Eye, Edit y Trash
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { supabase } from "@/lib/supabase";
 
@@ -16,20 +16,14 @@ interface Categoria {
   nombre: string;
 }
 
-interface Proveedor {
-  nombre: string;
-}
-
 interface Producto {
-  id: string;
+  id: number;
   nombre: string;
   precio: number;
-  precio_compra: number;
-  cantidad: number;
+  stock: number;
   stock_minimo: number;
-  ubicacion: string;
-  categoria: Categoria;
-  proveedor: Proveedor;
+  categoria_id: number;
+  categoria: Categoria; // Relación opcional
 }
 
 export default function InventarioPage() {
@@ -42,26 +36,26 @@ export default function InventarioPage() {
     const fetchProductos = async () => {
       try {
         const { data, error } = await supabase
-          .from("inventario")
+          .from("productos")
           .select(`
             id,
             nombre,
             precio,
-            precio_compra,
-            cantidad,
+            stock,
             stock_minimo,
-            ubicacion,
-            categoria:categorias_productos!inner(nombre),
-            proveedor:proveedores!inner(nombre)
+            categoria_id,
+            categoria:categorias(nombre)
           `);
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching products:", error);
+          throw error;
+        }
 
-        // Asegurarse de que categoria y proveedor sean objetos únicos
+        console.log("Datos de Supabase:", data); // Depuración
         const processedData = data.map((item) => ({
           ...item,
           categoria: item.categoria?.[0] || { nombre: "Sin categoría" },
-          proveedor: item.proveedor?.[0] || { nombre: "Sin proveedor" },
         }));
         setProductos(processedData);
       } catch (error) {
@@ -76,9 +70,9 @@ export default function InventarioPage() {
 
   const categorias = ["Todas", ...new Set(productos.map((p) => p.categoria.nombre))];
 
-  function getEstadoStock(cantidad: number, stockMinimo: number) {
-    if (cantidad === 0) return "agotado";
-    if (cantidad <= stockMinimo) return "bajo";
+  function getEstadoStock(stock: number, stockMinimo: number) {
+    if (stock === 0) return "agotado";
+    if (stock <= stockMinimo) return "bajo";
     return "normal";
   }
 
@@ -101,10 +95,10 @@ export default function InventarioPage() {
   }
 
   const productosFiltrados = productos.filter((producto) => {
+    const idString = producto.id.toString();
     const matchesSearch =
-      producto.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      producto.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (producto.proveedor?.nombre || "").toLowerCase().includes(searchQuery.toLowerCase());
+      idString.includes(searchQuery.toLowerCase()) ||
+      producto.nombre.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCategoria = filtroCategoria === "Todas" || producto.categoria.nombre === filtroCategoria;
 
@@ -131,7 +125,7 @@ export default function InventarioPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar por nombre, ID o proveedor..."
+            placeholder="Buscar por nombre o ID..."
             className="w-full pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -160,42 +154,44 @@ export default function InventarioPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>Producto</TableHead>
                 <TableHead className="hidden md:table-cell">Categoría</TableHead>
                 <TableHead className="text-right">Precio</TableHead>
                 <TableHead className="text-center">Stock</TableHead>
-                <TableHead className="hidden lg:table-cell">Proveedor</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {productosFiltrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={5} className="text-center">
                     No se encontraron productos que coincidan con los criterios de búsqueda.
                   </TableCell>
                 </TableRow>
               ) : (
                 productosFiltrados.map((producto) => {
-                  const estadoStock = getEstadoStock(producto.cantidad, producto.stock_minimo || 0);
+                  const estadoStock = getEstadoStock(producto.stock, producto.stock_minimo || 0);
                   return (
                     <TableRow key={producto.id}>
-                      <TableCell className="font-medium">{producto.id}</TableCell>
                       <TableCell>{producto.nombre}</TableCell>
                       <TableCell className="hidden md:table-cell">{producto.categoria.nombre}</TableCell>
                       <TableCell className="text-right">${producto.precio.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <span>{producto.cantidad}</span>
+                          <span>{producto.stock}</span>
                           <Badge variant={getVariantForStock(estadoStock)}>{traducirEstadoStock(estadoStock)}</Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell">{producto.proveedor?.nombre || "Sin proveedor"}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/inventario/${producto.id}`}>Ver detalles</Link>
-                        </Button>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center gap-2">
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/dashboard/inventario/${producto.id}`}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              Detalles
+                            </Link>
+                          </Button>
+                        
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

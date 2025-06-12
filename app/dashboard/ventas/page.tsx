@@ -118,24 +118,7 @@ export default function VentasPage() {
         const { data: ventasData, error: ventasError } = await supabase
           .from("ventas")
           .select(`
-            id,
-            fecha_venta,
-            cliente_nombre,
-            cliente_id,
-            total,
-            metodo_pago,
-            estado,
-            usuario,
-            descuento_general,
-            descuento_tipo,
-            notas,
-            productos_venta (
-              id,
-              producto_id,
-              cantidad,
-              precio_final,
-              inventario (nombre, precio)
-            )
+            *
           `)
           .order("fecha_venta", { ascending: false })
 

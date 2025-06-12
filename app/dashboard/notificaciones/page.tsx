@@ -1,15 +1,30 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { Bell, CheckCircle, AlertCircle, Package, ClipboardList, ShoppingCart, Calendar } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import { formatDistanceToNow } from "date-fns"
-import { es } from "date-fns/locale"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import {
+  Bell,
+  CheckCircle,
+  AlertCircle,
+  Package,
+  ClipboardList,
+  ShoppingCart,
+  Calendar,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
+import { useEmpresa } from "@/app/context/empresa-context"; // Ajusta el path según tu estructura
 
 // Mapa de iconos según el nombre almacenado en la base de datos
 const iconMap: { [key: string]: React.ComponentType<{ className?: string }> } = {
@@ -19,9 +34,8 @@ const iconMap: { [key: string]: React.ComponentType<{ className?: string }> } = 
   CheckCircle,
   AlertCircle,
   Calendar,
-}
+};
 
-// Definir la interfaz para Notificacion
 interface Notificacion {
   id: string;
   tipo: "alerta" | "info" | "exito";
@@ -34,103 +48,97 @@ interface Notificacion {
 }
 
 export default function NotificacionesPage() {
-  const [notificacionesData, setNotificacionesData] = useState<Notificacion[]>([])
-  const [loading, setLoading] = useState(true)
+  const { empresaId, loading: empresaLoading } = useEmpresa();
+  const [notificacionesData, setNotificacionesData] = useState<Notificacion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Cargar notificaciones iniciales y suscribirse a cambios en tiempo real
   useEffect(() => {
+    if (empresaLoading) return; // Esperar que cargue el contexto
+
+    if (!empresaId) {
+      setError("No se encontró una empresa asociada al usuario.");
+      setLoading(false);
+      return;
+    }
+
     const fetchNotificaciones = async () => {
+      setLoading(true);
+      setError(null);
+
       const { data, error } = await supabase
         .from("notificaciones")
         .select("*")
-        .order("fecha", { ascending: false })
-        .order("leida", { ascending: true })
+        .eq("empresa_id", empresaId)
+        .order("leida", { ascending: true }) // primero no leídas
+        .order("fecha", { ascending: false }); // luego más recientes
 
       if (error) {
-        console.error("Error fetching notificaciones:", error)
+        setError("Error al cargar notificaciones: " + error.message);
+        setNotificacionesData([]);
       } else {
-        setNotificacionesData(data || [])
+        setNotificacionesData(data || []);
       }
-      setLoading(false)
-    }
+      setLoading(false);
+    };
 
-    fetchNotificaciones()
+    fetchNotificaciones();
+  }, [empresaId, empresaLoading]);
 
-    // Suscripción a cambios en tiempo real
-    const subscription = supabase
-      .channel("notificaciones")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notificaciones" },
-        (payload) => {
-          setNotificacionesData((prev) => [payload.new as Notificacion, ...prev])
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "notificaciones" },
-        (payload) => {
-          setNotificacionesData((prev) =>
-            prev.map((n) => (n.id === payload.new.id ? payload.new as Notificacion : n)),
-          )
-        },
-      )
-      .subscribe()
-
-    // Limpieza de la suscripción al desmontar el componente
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  // Marcar todas como leídas
   const marcarTodasLeidas = async () => {
+    if (!empresaId) return;
     const { error } = await supabase
       .from("notificaciones")
       .update({ leida: true })
-      .eq("leida", false)
+      .eq("empresa_id", empresaId)
+      .eq("leida", false);
 
     if (error) {
-      console.error("Error marking all as read:", error)
+      console.error("Error marcando todas como leídas:", error);
     } else {
-      setNotificacionesData(
-        notificacionesData.map((notificacion) => ({
-          ...notificacion,
-          leida: true,
-        })),
-      )
+      setNotificacionesData((prev) => prev.map((n) => ({ ...n, leida: true })));
     }
-  }
+  };
 
-  // Marcar una notificación como leída
   const marcarLeida = async (id: string) => {
     const { error } = await supabase
       .from("notificaciones")
       .update({ leida: true })
-      .eq("id", id)
+      .eq("id", id);
 
     if (error) {
-      console.error("Error marking as read:", error)
+      console.error("Error marcando como leída:", error);
     } else {
-      setNotificacionesData(
-        notificacionesData.map((notificacion) =>
-          notificacion.id === id ? { ...notificacion, leida: true } : notificacion,
-        ),
-      )
+      setNotificacionesData((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, leida: true } : n))
+      );
     }
-  }
+  };
 
-  // Contar notificaciones no leídas
-  const noLeidas = notificacionesData.filter((n) => !n.leida).length
+  const noLeidas = notificacionesData.filter((n) => !n.leida).length;
 
-  if (loading) return <div>Cargando...</div>
+  if (empresaLoading || loading)
+    return (
+      <div className="flex h-screen items-center justify-center text-xl font-semibold">
+        Cargando...
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="flex h-screen items-center justify-center text-red-600 text-xl font-semibold">
+        {error}
+      </div>
+    );
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="min-h-screen flex flex-col gap-6 p-6 bg-gray-50 dark:bg-gray-900">
       <DashboardHeader />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold tracking-tight">Notificaciones</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+            Notificaciones
+          </h2>
           {noLeidas > 0 && (
             <Badge variant="default" className="ml-2">
               {noLeidas} nuevas
@@ -144,19 +152,22 @@ export default function NotificacionesPage() {
         )}
       </div>
 
-      <Card>
+      <Card className="flex-1">
         <CardHeader>
           <CardTitle>Centro de Notificaciones</CardTitle>
-          <CardDescription>Mantente al día con las actualizaciones del sistema</CardDescription>
+          <CardDescription>
+            Mantente al día con las actualizaciones del sistema
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {notificacionesData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Bell className="mb-2 h-12 w-12 text-muted-foreground" />
+              <div className="flex flex-col items-center justify-center py-8 text-center text-gray-600 dark:text-gray-400">
+                <Bell className="mb-2 h-12 w-12" />
                 <h3 className="text-lg font-medium">No hay notificaciones</h3>
-                <p className="text-sm text-muted-foreground">
-                  Las notificaciones aparecerán aquí cuando haya actualizaciones importantes.
+                <p className="text-sm">
+                  Las notificaciones aparecerán aquí cuando haya
+                  actualizaciones importantes.
                 </p>
               </div>
             ) : (
@@ -165,10 +176,10 @@ export default function NotificacionesPage() {
                   notificacion.tipo === "alerta"
                     ? "text-destructive"
                     : notificacion.tipo === "exito"
-                      ? "text-success"
-                      : "text-primary"
+                    ? "text-success"
+                    : "text-primary";
 
-                const IconComponent = iconMap[notificacion.icono]
+                const IconComponent = iconMap[notificacion.icono];
 
                 return (
                   <div
@@ -178,20 +189,33 @@ export default function NotificacionesPage() {
                     }`}
                   >
                     <div className={`mt-1 ${iconColor}`}>
-                      {IconComponent ? <IconComponent className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+                      {IconComponent ? (
+                        <IconComponent className="h-5 w-5" />
+                      ) : (
+                        <Bell className="h-5 w-5" />
+                      )}
                     </div>
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium">{notificacion.titulo}</h4>
                         <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(notificacion.fecha), { addSuffix: true, locale: es })}
+                          {formatDistanceToNow(new Date(notificacion.fecha), {
+                            addSuffix: true,
+                            locale: es,
+                          })}
                         </span>
                       </div>
-                      <p className="text-sm text-muted-foreground">{notificacion.mensaje}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {notificacion.mensaje}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {!notificacion.leida && (
-                        <Button variant="ghost" size="sm" onClick={() => marcarLeida(notificacion.id)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => marcarLeida(notificacion.id)}
+                        >
                           Marcar como leída
                         </Button>
                       )}
@@ -200,12 +224,12 @@ export default function NotificacionesPage() {
                       </Button>
                     </div>
                   </div>
-                )
+                );
               })
             )}
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

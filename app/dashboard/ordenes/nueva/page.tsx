@@ -49,7 +49,7 @@ export default function NuevaOrdenPage() {
   useEffect(() => {
     const loadOptions = async () => {
       const clientesData = await fetchOptions("clientes");
-      const tecnicosData = await fetchOptions("tecnicos");
+      const tecnicosData = await fetchOptions("empleados");
       setClientes(clientesData);
       setTecnicos(tecnicosData);
     };

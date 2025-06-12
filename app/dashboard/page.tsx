@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "@/components/ui/use-toast";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { DashboardCards } from "@/components/dashboard/dashboard-cards";
 import { RecentOrders } from "@/components/dashboard/recent-orders";
@@ -10,16 +11,8 @@ import { InventoryStatus } from "@/components/dashboard/inventory-status";
 import { DatePickerWithRange, DateRange } from "@/components/dashboard/date-range-picker";
 
 // Definición de tipos para las respuestas de Supabase
-interface PermissionModule {
-  name: string;
-}
-
-interface Permission {
-  permission_modules: PermissionModule[];
-}
-
 interface Sale {
-  total: number | null;
+  monto_total: number | null;
 }
 
 interface InventoryItem {
@@ -27,7 +20,22 @@ interface InventoryItem {
   stock_minimo: number | null;
 }
 
+// Definición de interfaces de props para los componentes
+interface RecentOrdersProps {
+  dateRange: DateRange | undefined;
+  empresaId: number;
+}
+
+interface InventoryStatusProps {
+  empresaId: number;
+}
+
 export default function DashboardPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const empresaId = searchParams.get("empresa_id");
+
+  // Estados para las métricas y el rango de fechas
   const [metrics, setMetrics] = useState({
     activeOrders: { current: 0, previous: 0 },
     monthlySales: { current: 0, previous: 0 },
@@ -41,121 +49,154 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
   useEffect(() => {
-    const fetchDataAndAuth = async () => {
-      // Verificar autenticación
+    const fetchData = async () => {
+      setLoading(true);
+
+      // 1. Validar que empresa_id esté presente
+      if (!empresaId) {
+        console.error("Falta el ID de la empresa en los parámetros.");
+        toast({ title: "Error", description: "Falta el ID de la empresa.", variant: "destructive" });
+        router.push("/auth/login");
+        return;
+      }
+
+      // 2. Verificar la sesión del usuario (desactivado durante desarrollo)
+      /*
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.error("No hay sesión activa.");
         router.push("/auth/login");
         return;
       }
 
-      // Obtener el rol del usuario desde la tabla users
       const { data: user, error: userError } = await supabase
-        .from("users")
-        .select("role")
+        .from("usuarios")
+        .select("rol")
         .eq("id", session.user.id)
         .single();
-      if (userError || !user?.role) {
+      if (userError || !user?.rol) {
+        console.error("Error al verificar el rol del usuario:", userError);
+        toast({ title: "Error", description: "No se pudo verificar el usuario.", variant: "destructive" });
         router.push("/auth/login");
         return;
       }
+      */
 
-      // Obtener permisos basados en el rol
-      const { data: permissions, error: permError } = await supabase
-        .from("role_permissions")
-        .select(`
-          permission_modules (
-            name
-          )
-        `)
-        .eq("role", user.role);
-      if (permError || !permissions?.some((p: Permission) => p.permission_modules.some((module) => module.name === "dashboard_access"))) {
-        router.push("/auth/login");
-        return;
-      }
-
-      // Calcular fechas del periodo anterior
+      // 3. Calcular el periodo anterior para comparar métricas
       const previousPeriod = {
         from: dateRange?.from ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth() - 1, 1) : undefined,
         to: dateRange?.from ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), 0) : undefined,
       };
 
-      // Cargar métricas
       try {
-        // Órdenes activas
+        // 4. Obtener órdenes activas de la empresa
         const { data: activeOrders, error: ordersError } = await supabase
-          .from("ordenes")
+          .from("ordenes_trabajo")
           .select("id")
-          .neq("estado", "Entregado")
+          .eq("empresa_id", parseInt(empresaId))
+          .neq("estado", "completada")
           .gte("created_at", dateRange?.from?.toISOString() || "")
           .lte("created_at", dateRange?.to?.toISOString() || "");
-        if (ordersError) throw ordersError;
+        if (ordersError) {
+          console.error("Error al obtener órdenes activas:", ordersError);
+          throw ordersError;
+        }
 
-        const { data: prevActiveOrders } = await supabase
-          .from("ordenes")
+        const { data: prevActiveOrders, error: prevOrdersError } = await supabase
+          .from("ordenes_trabajo")
           .select("id")
-          .neq("estado", "Entregado")
+          .eq("empresa_id", parseInt(empresaId))
+          .neq("estado", "completada")
           .gte("created_at", previousPeriod.from?.toISOString() || "")
           .lte("created_at", previousPeriod.to?.toISOString() || "");
+        if (prevOrdersError) {
+          console.error("Error al obtener órdenes activas del periodo anterior:", prevOrdersError);
+          throw prevOrdersError;
+        }
 
-        // Ventas
+        // 5. Obtener ventas (facturas) de la empresa
         const { data: sales, error: salesError } = await supabase
-          .from("ventas")
-          .select("total")
-          .gte("created_at", dateRange?.from?.toISOString() || "")
-          .lte("created_at", dateRange?.to?.toISOString() || "");
-        if (salesError) throw salesError;
+          .from("facturas")
+          .select("monto_total")
+          .eq("empresa_id", parseInt(empresaId))
+          .gte("fecha_emision", dateRange?.from?.toISOString() || "")
+          .lte("fecha_emision", dateRange?.to?.toISOString() || "");
+        if (salesError) {
+          console.error("Error al obtener ventas:", salesError);
+          throw salesError;
+        }
 
-        const { data: prevSales } = await supabase
-          .from("ventas")
-          .select("total")
-          .gte("created_at", previousPeriod.from?.toISOString() || "")
-          .lte("created_at", previousPeriod.to?.toISOString() || "");
+        const { data: prevSales, error: prevSalesError } = await supabase
+          .from("facturas")
+          .select("monto_total")
+          .eq("empresa_id", parseInt(empresaId))
+          .gte("fecha_emision", previousPeriod.from?.toISOString() || "")
+          .lte("fecha_emision", previousPeriod.to?.toISOString() || "");
+        if (prevSalesError) {
+          console.error("Error al obtener ventas del periodo anterior:", prevSalesError);
+          throw prevSalesError;
+        }
 
-        // Inventario
+        // 6. Obtener inventario de la empresa
         const { data: inventory, error: inventoryError } = await supabase
-          .from("inventario")
-          .select("stock, stock_minimo");
-        if (inventoryError) throw inventoryError;
+          .from("productos")
+          .select("stock, stock_minimo")
+          .eq("empresa_id", parseInt(empresaId));
+        if (inventoryError) {
+          console.error("Error al obtener inventario:", inventoryError);
+          throw inventoryError;
+        }
 
-        // Nuevos clientes (contact_requests)
+        // 7. Obtener nuevos clientes de la empresa
         const { data: clients, error: clientsError } = await supabase
-          .from("contact_requests")
+          .from("clientes")
           .select("id")
+          .eq("empresa_id", parseInt(empresaId))
           .gte("created_at", dateRange?.from?.toISOString() || "")
+          // Corrección: Cambiar "toId()" por "toISOString()"
           .lte("created_at", dateRange?.to?.toISOString() || "");
-        if (clientsError) throw clientsError;
+        if (clientsError) {
+          console.error("Error al agregar clientes:", clientsError);
+          throw clientsError;
+        }
 
-        const { data: prevClients } = await supabase
-          .from("contact_requests")
+        const { data: prevClients, error: prevClientsError } = await supabase
+          .from("clientes")
           .select("id")
+          .eq("empresa_id", parseInt(empresaId))
           .gte("created_at", previousPeriod.from?.toISOString() || "")
           .lte("created_at", previousPeriod.to?.toISOString() || "");
+        if (prevClientsError) {
+          console.error("Error al obtener clientes del periodo anterior:", prevClientsError);
+          throw prevClientsError;
+        }
 
-        // Calcular totales asegurando que no sea null
-        const monthlySalesTotal = sales?.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0;
-        const prevMonthlySalesTotal = prevSales?.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0;
-        const lowStockCount = inventory?.filter((item: InventoryItem) => (item.stock || 0) <= (item.stock_minimo || 0)).length || 0;
+        // 8. Calcular métricas
+        const monthlySalesTotal = sales?.reduce((sum, sale) => sum + (sale.monto_total || 0), 0) || 0;
+        const prevMonthlySalesTotal = prevSales?.reduce((sum, sale) => sum + (sale.monto_total || 0), 0) || 0;
+        const lowStockItems = inventory?.filter((item: InventoryItem) => (item.stock || 0) <= (item.stock_minimo || 0)).length || 0;
 
         setMetrics({
           activeOrders: { current: activeOrders?.length || 0, previous: prevActiveOrders?.length || 0 },
           monthlySales: { current: monthlySalesTotal, previous: prevMonthlySalesTotal },
           stockItems: inventory?.length || 0,
-          lowStockItems: lowStockCount,
+          lowStockItems,
           newClients: { current: clients?.length || 0, previous: prevClients?.length || 0 },
         });
+
+        console.log("Métricas cargadas para empresa_id:", empresaId, metrics);
         setLoading(false);
       } catch (err: any) {
+        console.error("Error al cargar las métricas:", err);
         setError("Error al cargar las métricas: " + err.message);
         setLoading(false);
       }
     };
 
-    fetchDataAndAuth();
-  }, [router, dateRange]);
+    fetchData();
+  }, [router, dateRange, empresaId]);
 
   if (loading) return <div className="p-6">Cargando...</div>;
   if (error) return <div className="p-6 text-red-500">{error}</div>;
@@ -168,8 +209,10 @@ export default function DashboardPage() {
       </div>
       <DashboardCards metrics={metrics} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RecentOrders dateRange={dateRange} />
-        <InventoryStatus />
+        {/* Corrección: Asegurar que RecentOrders acepte las props definidas en RecentOrdersProps */}
+        <RecentOrders dateRange={dateRange} empresaId={parseInt(empresaId || "0")} />
+        {/* Corrección: Asegurar que InventoryStatus acepte las props definidas en InventoryStatusProps */}
+        <InventoryStatus empresaId={parseInt(empresaId || "0")} />
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ export default function NuevoProveedorPage() {
     contacto_nombre: "",
     contacto_telefono: "",
     notas: "",
-    documento: "", // Solo un campo para RUC/Cédula
+    documento: "",
   })
   const [loading, setLoading] = useState(false)
 
@@ -50,24 +50,37 @@ export default function NuevoProveedorPage() {
     setLoading(true)
 
     try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session?.user) throw new Error("No se pudo obtener la sesión")
+
+      const userId = session.user.id
+
+      const { data: empresa, error: empresaError } = await supabase
+        .from("empresas")
+        .select("id")
+        .eq("superadmin_id", userId)
+        .single()
+
+      if (empresaError || !empresa) throw new Error("Empresa no encontrada")
+
+      const empresaId = empresa.id
+
       const { data: lastProveedor, error: fetchError } = await supabase
         .from("proveedores")
-        .select("id")
-        .order("id", { ascending: false })
+        .select("codigo")
+        .eq("empresa_id", empresaId)
+        .order("codigo", { ascending: false })
         .limit(1)
         .single()
 
-      if (fetchError && fetchError.code !== "PGRST116") throw fetchError
-
       let newIdNumber = 1
-      if (lastProveedor) {
-        const lastIdNumber = parseInt(lastProveedor.id.split("-")[1])
+      if (lastProveedor?.codigo) {
+        const lastIdNumber = parseInt(lastProveedor.codigo.split("-")[1])
         newIdNumber = lastIdNumber + 1
       }
-      const newId = `PROV-${String(newIdNumber).padStart(3, "0")}`
+      const newCode = `PROV-${String(newIdNumber).padStart(3, "0")}`
 
-      const { error: insertError } = await supabase.from("proveedores").insert({
-        id: newId,
+      const { error: insertError } = await supabase.from("proveedores").insert([{
         nombre: formData.nombre,
         tipo: formData.tipo,
         telefono: formData.telefono,
@@ -77,10 +90,12 @@ export default function NuevoProveedorPage() {
         contacto_telefono: formData.contacto_telefono || null,
         notas: formData.notas || null,
         documento: formData.documento || null,
-        productos: 0, // Inicializar con 0 productos
-        ultima_compra: null, // Inicializar sin última compra
-        estado: "activo", // Estado inicial
-      })
+        productos: 0,
+        ultima_compra: null,
+        estado: "activo",
+        codigo: newCode,
+        empresa_id: empresaId
+      }])
 
       if (insertError) throw insertError
 
@@ -90,12 +105,14 @@ export default function NuevoProveedorPage() {
       })
 
       router.push("/dashboard/proveedores")
+
     } catch (error: any) {
       toast({
         title: "Error",
         description: "No se pudo crear el proveedor: " + error.message,
         variant: "destructive",
       })
+      console.error("Error detallado:", error)
     } finally {
       setLoading(false)
     }

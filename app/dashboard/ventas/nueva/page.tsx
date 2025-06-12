@@ -6,20 +6,39 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { ArrowLeft, Minus, Plus, Search, Trash } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 
-// Tipos
+// Tipos para TypeScript
 interface Cliente {
   id: string;
   nombre: string;
 }
-
 interface Producto {
   id: string;
   nombre: string;
@@ -27,7 +46,6 @@ interface Producto {
   precio: number;
   cantidad: number;
 }
-
 interface ProductoCarrito {
   id: string;
   nombre: string;
@@ -38,6 +56,7 @@ interface ProductoCarrito {
 
 export default function NuevaVentaPage() {
   const router = useRouter();
+
   const [clienteId, setClienteId] = useState("");
   const [metodoPago, setMetodoPago] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -45,446 +64,238 @@ export default function NuevaVentaPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Estados para datos de Supabase
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Cargar clientes y productos desde Supabase
   useEffect(() => {
-    const fetchData = async () => {
+    async function fetchData() {
       setLoadingData(true);
       try {
-        // Cargar clientes
-        const { data: clientesData, error: clientesError } = await supabase
+        const { data: clientesData, error: errClientes } = await supabase
           .from("clientes")
           .select("id, nombre");
-
-        if (clientesError) throw clientesError;
+        if (errClientes) throw errClientes;
         setClientes(clientesData || []);
 
-        // Cargar productos
-        const { data: productosData, error: productosError } = await supabase
-          .from("inventario")
-          .select("id, nombre, categoria:categorias_productos!inner(nombre), precio, cantidad");
+        const { data: productosData, error: errProductos } = await supabase
+          .from("productos")
+.select(`
+  id,
+  nombre,
+  precio,
+  stock,
+  categorias (
+    nombre
+  )
+`)
+          .order("nombre", { ascending: true });
+        if (errProductos) throw errProductos;
 
-        if (productosError) throw productosError;
-
-        const mappedProductos: Producto[] = productosData.map((p: any) => ({
+        const mapped: Producto[] = (productosData || []).map((p: any) => ({
           id: p.id,
           nombre: p.nombre,
-          categoria: p.categoria?.nombre || "Sin categoría",
-          precio: p.precio || 0,
-          cantidad: p.cantidad || 0,
+          precio: p.precio,
+          cantidad: p.stock,
+          categoria: p.categorias?.nombre || "Sin categoría",
         }));
-
-        setProductos(mappedProductos);
-      } catch (error: any) {
-        console.error("Error fetching data:", error);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar los clientes o productos.",
-          variant: "destructive",
-        });
+        setProductos(mapped);
+      } catch (err: any) {
+        console.error("Error fetching:", err);
+        toast({ title: "Error", description: err.message, variant: "destructive" });
       } finally {
         setLoadingData(false);
       }
-    };
+    }
 
     fetchData();
   }, []);
 
-  // Filtrar productos según búsqueda
-  const productosFiltrados = productos.filter((producto) =>
-    producto.nombre.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
-  // Actualizar total cuando cambia el carrito
-  useEffect(() => {
-    const nuevoTotal = carrito.reduce((sum, item) => sum + item.subtotal, 0);
-    setTotal(nuevoTotal);
+  useEffect(() => { // recalcula total cart
+    setTotal(carrito.reduce((sum, i) => sum + i.subtotal, 0));
   }, [carrito]);
 
-  // Agregar producto al carrito
-  const agregarProducto = (producto: Producto) => {
-    const productoExistente = carrito.find((item) => item.id === producto.id);
+  const productosFiltrados = productos.filter(p =>
+    p.nombre.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-    if (productoExistente) {
-      // Si ya existe, incrementar cantidad (verificar stock disponible)
-      const productoInventario = productos.find((p) => p.id === producto.id);
-      if (productoInventario && productoExistente.cantidad >= productoInventario.cantidad) {
-        toast({
+  function agregarProducto(p: Producto) {
+    const exist = carrito.find(i => i.id === p.id);
+    const max = p.cantidad;
+    if (exist) {
+      if (exist.cantidad >= max) {
+        return toast({
           title: "Stock insuficiente",
-          description: `No hay suficiente stock de ${producto.nombre}. Disponible: ${productoInventario.cantidad} unidades.`,
+          description: `Solo quedan ${max} unidades de ${p.nombre}.`,
           variant: "destructive",
         });
-        return;
       }
-
-      setCarrito(
-        carrito.map((item) =>
-          item.id === producto.id
-            ? {
-                ...item,
-                cantidad: item.cantidad + 1,
-                subtotal: (item.cantidad + 1) * item.precio,
-              }
-            : item,
-        ),
-      );
+      setCarrito(carrito.map(i =>
+        i.id === p.id
+          ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precio }
+          : i
+      ));
     } else {
-      // Si no existe, agregar nuevo
-      setCarrito([
-        ...carrito,
-        {
-          id: producto.id,
-          nombre: producto.nombre,
-          precio: producto.precio,
-          cantidad: 1,
-          subtotal: producto.precio,
-        },
-      ]);
+      setCarrito([...carrito, { id: p.id, nombre: p.nombre, precio: p.precio, cantidad: 1, subtotal: p.precio }]);
     }
-  };
+  }
 
-  // Incrementar cantidad de un producto en el carrito
-  const incrementarCantidad = (id: string) => {
-    const productoExistente = carrito.find((item) => item.id === id);
-    const productoInventario = productos.find((p) => p.id === id);
+  function incrementar(id: string) {
+    const prod = productos.find(p => p.id === id);
+    if (!prod) return;
+    agregarProducto(prod);
+  }
+  function decrementar(id: string) {
+    setCarrito(carrito.map(i =>
+      i.id === id && i.cantidad > 1
+        ? { ...i, cantidad: i.cantidad - 1, subtotal: (i.cantidad - 1) * i.precio }
+        : i
+    ));
+  }
+  function eliminar(id: string) {
+    setCarrito(carrito.filter(i => i.id !== id));
+  }
 
-    if (productoExistente && productoInventario && productoExistente.cantidad >= productoInventario.cantidad) {
-      toast({
-        title: "Stock insuficiente",
-        description: `No hay suficiente stock de ${productoExistente.nombre}. Disponible: ${productoInventario.cantidad} unidades.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setCarrito(
-      carrito.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              cantidad: item.cantidad + 1,
-              subtotal: (item.cantidad + 1) * item.precio,
-            }
-          : item,
-      ),
-    );
-  };
-
-  // Decrementar cantidad de un producto en el carrito
-  const decrementarCantidad = (id: string) => {
-    setCarrito(
-      carrito.map((item) =>
-        item.id === id && item.cantidad > 1
-          ? {
-              ...item,
-              cantidad: item.cantidad - 1,
-              subtotal: (item.cantidad - 1) * item.precio,
-            }
-          : item,
-      ),
-    );
-  };
-
-  // Eliminar producto del carrito
-  const eliminarProducto = (id: string) => {
-    setCarrito(carrito.filter((item) => item.id !== id));
-  };
-
-  // Procesar la venta
-  const procesarVenta = async () => {
-    if (carrito.length === 0) {
-      toast({
-        title: "Carrito vacío",
-        description: "El carrito está vacío. Agrega productos para continuar.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!metodoPago) {
-      toast({
-        title: "Método de pago requerido",
-        description: "Selecciona un método de pago para continuar.",
-        variant: "destructive",
-      });
-      return;
-    }
+  async function procesarVenta() {
+    if (!metodoPago) return toast({ title: "Pago requerido", description: "...", variant: "destructive" });
+    if (!carrito.length) return toast({ title: "Carrito vacío", variant: "destructive" });
 
     setLoading(true);
-
+    const ventaId = `VTA-${Date.now()}`;
     try {
-      // Generar un ID único para la venta
-      const ventaId = `VTA-${Date.now()}-${Math.floor(Math.random() * 1000)
-        .toString()
-        .padStart(3, "0")}`;
-
-      // Guardar la venta en la tabla `ventas`
-      const { error: ventaError } = await supabase.from("ventas").insert({
+      let { error: errVenta } = await supabase.from("ventas").insert({
         id: ventaId,
-        cliente_id: clienteId === "anonymous" ? null : clienteId || null,
-        subtotal: total,
-        descuento_general: 0, // No se manejan descuentos generales en este formulario
-        impuesto: 0, // Asumimos que no hay impuestos por ahora
+        cliente_id: clienteId || null,
         total,
-        total_ahorrado: 0,
-        factura_generada: false,
-        numero_venta: ventaId,
         metodo_pago: metodoPago,
-        estado: "completada",
       });
+      if (errVenta) throw errVenta;
 
-      if (ventaError) throw ventaError;
-
-      // Guardar los productos de la venta en la tabla `productos_venta`
-      const productosVenta = carrito.map((item) => ({
+      const detalle = carrito.map(i => ({
         venta_id: ventaId,
-        producto_id: item.id,
-        cantidad: item.cantidad,
-        precio_final: item.precio,
-        descuento: 0, // No se manejan descuentos por producto en este formulario
-        descuento_tipo: "monto",
+        producto_id: i.id,
+        cantidad: i.cantidad,
+        precio_unitario: i.precio,
+        subtotal: i.subtotal,
       }));
+      let { error: errDet } = await supabase.from("detalle_venta").insert(detalle);
+      if (errDet) throw errDet;
 
-      const { error: productosError } = await supabase.from("productos_venta").insert(productosVenta);
+      await Promise.all(carrito.map(i =>
+        supabase.from("productos").update({ stock: productos.find(p => p.id === i.id)!.cantidad - i.cantidad }).eq("id", i.id)
+      ));
 
-      if (productosError) throw productosError;
-
-      // Actualizar el stock en la tabla `inventario`
-      for (const item of carrito) {
-        const producto = productos.find((p) => p.id === item.id);
-        if (producto) {
-          const nuevoStock = producto.cantidad - item.cantidad;
-          const { error: stockError } = await supabase
-            .from("inventario")
-            .update({ cantidad: nuevoStock })
-            .eq("id", item.id);
-
-          if (stockError) throw stockError;
-        }
-      }
-
-      // Registrar movimiento en `movimientos_inventario` (salida por venta)
-      const movimientos = carrito.map((item) => ({
-        producto_id: item.id,
+      await supabase.from("inventario_movimientos").insert(carrito.map(i => ({
+        producto_id: i.id,
         tipo: "salida",
-        cantidad: item.cantidad,
-        fecha: new Date().toISOString(),
-        referencia: `Venta ${ventaId}`,
-        usuario_id: "Sistema", // Ajusta según tu lógica de autenticación
-      }));
+        cantidad: i.cantidad,
+        motivo: `Venta ${ventaId}`,
+      })));
 
-      const { error: movimientosError } = await supabase.from("movimientos_inventario").insert(movimientos);
-
-      if (movimientosError) throw movimientosError;
-
-      toast({
-        title: "Venta completada",
-        description: "La venta se ha registrado correctamente.",
-      });
-
-      // Redireccionar a la lista de ventas
+      toast({ title: "Venta registrada" });
       router.push("/dashboard/ventas");
-    } catch (error: any) {
-      console.error("Error al procesar la venta:", error);
-      toast({
-        title: "Error",
-        description: "No se pudo procesar la venta. Intente nuevamente.",
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  };
-
-  if (loadingData) {
-    return <div className="p-6">Cargando datos...</div>;
   }
 
+  if (loadingData) return <div className="p-6">Cargando...</div>;
+
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="p-6 flex flex-col gap-6">
       <DashboardHeader />
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" asChild>
-          <Link href="/dashboard/ventas">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <h2 className="text-2xl font-bold tracking-tight">Nueva Venta</h2>
+        <Button asChild variant="outline" size="icon"><Link href="/dashboard/ventas"><ArrowLeft/></Link></Button>
+        <h2 className="text-2xl font-bold">Nueva Venta</h2>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Buscar Productos</CardTitle>
-              <CardDescription>Busca y agrega productos al carrito</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="relative mb-4">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Buscar productos..."
-                  className="w-full pl-8"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Categoría</TableHead>
-                    <TableHead className="text-right">Precio</TableHead>
-                    <TableHead className="text-center">Stock</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
+      <div className="grid lg:grid-cols-[2fr,1fr] gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Buscar productos</CardTitle>
+            <CardDescription>Filtra y agrega al carrito</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative mb-4">
+              <Search className="absolute left-2 top-2" />
+              <Input placeholder="Buscar..." className="pl-8" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead className="text-right">Precio</TableHead>
+                  <TableHead className="text-center">Stock</TableHead>
+                  <TableHead className="text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {productosFiltrados.map(p => (
+                  <TableRow key={p.id}>
+                    <TableCell>{p.nombre}</TableCell>
+                    <TableCell>{p.categoria}</TableCell>
+                    <TableCell className="text-right">${p.precio.toFixed(2)}</TableCell>
+                    <TableCell className="text-center">{p.cantidad}</TableCell>
+                    <TableCell className="text-right">
+                      <Button disabled={p.cantidad === 0} size="sm" onClick={() => agregarProducto(p)}>
+                        <Plus className="mr-1" />Añadir
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {productosFiltrados.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center">
-                        No se encontraron productos que coincidan con la búsqueda.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    productosFiltrados.map((producto) => (
-                      <TableRow key={producto.id}>
-                        <TableCell className="font-medium">{producto.nombre}</TableCell>
-                        <TableCell>{producto.categoria}</TableCell>
-                        <TableCell className="text-right">${producto.precio.toFixed(2)}</TableCell>
-                        <TableCell className="text-center">{producto.cantidad}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            onClick={() => agregarProducto(producto)}
-                            disabled={producto.cantidad === 0}
-                          >
-                            <Plus className="mr-1 h-4 w-4" />
-                            Agregar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Carrito de Compra</CardTitle>
-              <CardDescription>Productos seleccionados para la venta</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {carrito.length === 0 ? (
-                <div className="py-4 text-center text-muted-foreground">
-                  El carrito está vacío. Agrega productos para continuar.
+        <Card>
+          <CardHeader>
+            <CardTitle>Carrito</CardTitle>
+            <CardDescription>Revisa y completa la venta</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!carrito.length
+              ? <div className="text-center py-4">Carrito vacío</div>
+              : carrito.map(i => (
+                <div key={i.id} className="flex justify-between items-center border p-2">
+                  <div>
+                    <strong>{i.nombre}</strong> <br/>
+                    ${i.precio.toFixed(2)} x {i.cantidad}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" onClick={() => decrementar(i.id)} disabled={i.cantidad <= 1}><Minus /></Button>
+                    <Button size="icon" onClick={() => incrementar(i.id)}><Plus /></Button>
+                    <Button variant="ghost" size="icon" className="text-red-500" onClick={() => eliminar(i.id)}><Trash/></Button>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {carrito.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="space-y-1">
-                        <p className="font-medium">{item.nombre}</p>
-                        <p className="text-sm text-muted-foreground">
-                          ${item.precio.toFixed(2)} x {item.cantidad}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center rounded-md border">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-r-none"
-                            onClick={() => decrementarCantidad(item.id)}
-                            disabled={item.cantidad <= 1}
-                          >
-                            <Minus className="h-3 w-3" />
-                            <span className="sr-only">Decrementar</span>
-                          </Button>
-                          <div className="flex h-8 w-10 items-center justify-center text-sm">{item.cantidad}</div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-l-none"
-                            onClick={() => incrementarCantidad(item.id)}
-                          >
-                            <Plus className="h-3 w-3" />
-                            <span className="sr-only">Incrementar</span>
-                          </Button>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => eliminarProducto(item.id)}
-                        >
-                          <Trash className="h-4 w-4" />
-                          <span className="sr-only">Eliminar</span>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <div className="space-y-4 w-full">
-                <div className="space-y-2">
-                  <Label htmlFor="cliente">Cliente (Opcional)</Label>
-                  <Select value={clienteId} onValueChange={setClienteId}>
-                    <SelectTrigger id="cliente">
-                      <SelectValue placeholder="Selecciona un cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="anonymous">Cliente Anónimo</SelectItem>
-                      {clientes.map((cliente) => (
-                        <SelectItem key={cliente.id} value={cliente.id}>
-                          {cliente.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="metodo_pago">Método de Pago</Label>
-                  <Select value={metodoPago} onValueChange={setMetodoPago} required>
-                    <SelectTrigger id="metodo_pago">
-                      <SelectValue placeholder="Selecciona un método de pago" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["Efectivo", "Tarjeta", "Transferencia"].map((metodo) => (
-                        <SelectItem key={metodo} value={metodo}>
-                          {metodo}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex w-full items-center justify-between border-t pt-4">
-                <div className="text-lg font-semibold">Total:</div>
-                <div className="text-xl font-bold">${total.toFixed(2)}</div>
-              </div>
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={procesarVenta}
-                disabled={carrito.length === 0 || !metodoPago || loading}
-              >
-                {loading ? "Procesando..." : "Completar Venta"}
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
+              ))
+            }
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4">
+            <Label>Método de pago</Label>
+            <Select value={metodoPago} onValueChange={setMetodoPago}>
+              <SelectTrigger><SelectValue placeholder="Elige"/></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Efectivo">Efectivo</SelectItem>
+                <SelectItem value="Tarjeta">Tarjeta</SelectItem>
+                <SelectItem value="Transferencia">Transferencia</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="flex justify-between text-xl font-bold">
+              <span>Total:</span>
+              <span>${total.toFixed(2)}</span>
+            </div>
+
+            <Button className="w-full" size="lg" onClick={procesarVenta} disabled={!carrito.length || !metodoPago || loading}>
+              {loading ? "Procesando..." : "Completar Venta"}
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );

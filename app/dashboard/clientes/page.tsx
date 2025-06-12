@@ -16,7 +16,7 @@ interface Cliente {
   nombre: string;
   cedula: string;
   telefono: string;
-  correo: string;
+  email: string;
   ultima_visita: string;
   ordenes_activas: number;
   total_gastado: number;
@@ -32,7 +32,7 @@ export default function ClientesPage() {
       try {
         const { data: clientesData, error: clientesError } = await supabase
           .from("clientes")
-          .select("id, nombre, cedula, telefono, correo");
+          .select("id, nombre, cedula, telefono, email");
 
         if (clientesError) throw clientesError;
 
@@ -97,7 +97,7 @@ export default function ClientesPage() {
       cliente.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cliente.cedula.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cliente.telefono.includes(searchQuery) ||
-      cliente.correo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cliente.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cliente.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -121,7 +121,7 @@ export default function ClientesPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar por nombre, cédula, teléfono, correo o ID..."
+            placeholder="Buscar por nombre, cédula, teléfono, email o ID..."
             className="w-full pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -170,7 +170,7 @@ export default function ClientesPage() {
                         </div>
                         <div className="flex items-center">
                           <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
-                          {cliente.correo}
+                          {cliente.email}
                         </div>
                       </div>
                     </TableCell>

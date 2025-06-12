@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import Header from "@/components/Header";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 
 export default function LandingPage() {
   const [statusData, setStatusData] = useState<any>(null);
@@ -151,8 +151,23 @@ export default function LandingPage() {
           transform: translateY(-2px);
         }
       `}</style>
+<header className="sticky top-0 z-50 w-full bg-white shadow-sm">
+  <div className="container flex items-center justify-between py-4">
+    <Link href="/" className="flex items-center gap-2">
+      <Smartphone className="h-6 w-6 text-blue-600" />
+      <span className="text-lg font-bold text-gray-800">Eco_Tech</span>
+    </Link>
+    <nav className="hidden md:flex items-center gap-6">
+      <Link href="#servicios" className="text-gray-700 hover:text-blue-600 font-medium">Servicios</Link>
+      <Link href="#nosotros" className="text-gray-700 hover:text-blue-600 font-medium">Nosotros</Link>
+      <Link href="#contacto" className="text-gray-700 hover:text-blue-600 font-medium">Contacto</Link>
+    </nav>
+    <div className="md:hidden">
+      {/* Aquí podrías agregar un menú hamburguesa para móvil si lo deseas */}
+    </div>
+  </div>
+</header>
 
-      <Header />
 
       <main className="flex-1">
         <section className="bg-gradient-to-b from-blue-50 to-white py-24">
