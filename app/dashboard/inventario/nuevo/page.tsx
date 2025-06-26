@@ -1,54 +1,107 @@
 "use client";
 
 import type React from "react";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { useEmpresa } from "@/app/context/empresa-context";
 
-const proveedores = [
-  { id: "PROV-001", nombre: "TechParts Inc." },
-  { id: "PROV-002", nombre: "BatteryPlus" },
-  { id: "PROV-003", nombre: "ElectroSupply" },
-  { id: "PROV-004", nombre: "ScreenGuard" },
-  { id: "PROV-005", nombre: "CaseMakers" },
-];
+interface Categoria {
+  id: number;
+  nombre: string;
+}
 
-const categorias = [
-  { id: 1, nombre: "Repuestos" },
-  { id: 2, nombre: "Accesorios" },
-  { id: 3, nombre: "Cables" },
-  { id: 4, nombre: "Audio" },
-  { id: 5, nombre: "Baterías" },
-  { id: 6, nombre: "Protectores" },
-  { id: 7, nombre: "Fundas" },
-  { id: 8, nombre: "Otros" },
-];
+interface Proveedor {
+  id: string; // uuid
+  nombre: string;
+}
 
 export default function NuevoProductoPage() {
+  const { empresaId } = useEmpresa();
   const router = useRouter();
+
   const [formData, setFormData] = useState({
     nombre: "",
-    categoria: "",
+    categoria_id: "",
     descripcion: "",
-    precio_compra: "",
-    precio_venta: "",
-    stock: "",
-    stock_minimo: "",
+    precio_compra: "0",
+    precio_venta: "0",
+    stock: "0",
+    stock_minimo: "0",
     ubicacion: "",
     proveedor_id: "",
   });
+
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    if (!empresaId) {
+      setLoadingData(false);
+      toast({ title: "Advertencia", description: "ID de empresa no disponible. Asegúrate de iniciar sesión en una empresa.", variant: "default" });
+      return;
+    }
+
+    const fetchData = async () => {
+      try {
+        setLoadingData(true);
+
+        const { data: categoriasData, error: categoriasError } = await supabase
+          .from("categorias")
+          .select("id, nombre")
+          .eq("empresa_id", empresaId);
+
+        const { data: proveedoresData, error: proveedoresError } = await supabase
+          .from("proveedores")
+          .select("id, nombre")
+          .eq("empresa_id", empresaId)
+          .eq("estado", "activo")
+          .order("nombre", { ascending: true });
+
+        if (categoriasError || proveedoresError) {
+          throw categoriasError || proveedoresError;
+        }
+
+        setCategorias(categoriasData || []);
+        setProveedores(proveedoresData || []);
+      } catch (error) {
+        console.error("Error cargando datos:", error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar categorías o proveedores.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    fetchData();
+  }, [empresaId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -70,30 +123,55 @@ export default function NuevoProductoPage() {
     setLoading(true);
 
     try {
+      if (!empresaId) {
+        throw new Error("ID de empresa no disponible. No se puede crear el producto.");
+      }
+
       const parsedData = {
         nombre: formData.nombre,
         descripcion: formData.descripcion,
         precio: parseFloat(formData.precio_venta) || 0,
+        precio_compra: parseFloat(formData.precio_compra) || 0,
         stock: parseInt(formData.stock, 10) || 0,
         stock_minimo: parseInt(formData.stock_minimo, 10) || 0,
-        categoria_id: formData.categoria,
+        categoria_id: parseInt(formData.categoria_id, 10) || null,
+        empresa_id: empresaId,
+        ubicacion: formData.ubicacion,
       };
 
-      if (!parsedData.nombre) {
-        throw new Error("Por favor completa el campo obligatorio (Nombre).");
+      if (!parsedData.nombre || !parsedData.categoria_id || parsedData.precio <= 0 || parsedData.stock < 0) {
+        throw new Error("Por favor completa todos los campos obligatorios: Nombre, Categoría, Precio de Venta (mayor a 0) y Stock Inicial (no negativo).");
       }
 
-      const { error } = await supabase.from("productos").insert([parsedData]);
+      const { data: producto, error: productoError } = await supabase
+        .from("productos")
+        .insert([parsedData])
+        .select("id")
+        .single();
 
-      if (error) throw error;
+      if (productoError) throw productoError;
+
+      if (formData.proveedor_id) {
+        const { error: proveedorError } = await supabase
+          .from("productos_proveedores")
+          .insert({
+            producto_id: producto.id,
+            proveedor_id: formData.proveedor_id,
+          });
+
+        if (proveedorError) throw proveedorError;
+      }
 
       toast({
         title: "Producto creado",
         description: "El producto ha sido creado correctamente.",
       });
 
-      router.push("/dashboard/inventario");
+      setTimeout(() => {
+        router.push("/dashboard/inventario");
+      }, 1000);
     } catch (error: any) {
+      console.error("Error al crear el producto:", error);
       toast({
         title: "Error",
         description: error.message || "No se pudo crear el producto.",
@@ -103,6 +181,8 @@ export default function NuevoProductoPage() {
       setLoading(false);
     }
   };
+
+  if (loadingData) return <div className="p-6">Cargando datos...</div>;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -125,19 +205,19 @@ export default function NuevoProductoPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre del Producto</Label>
+                <Label htmlFor="nombre">Nombre del Producto *</Label>
                 <Input id="nombre" name="nombre" value={formData.nombre} onChange={handleChange} required />
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="categoria">Categoría</Label>
+                  <Label htmlFor="categoria_id">Categoría *</Label>
                   <Select
-                    value={formData.categoria}
-                    onValueChange={(value) => handleSelectChange("categoria", value)}
+                    value={formData.categoria_id}
+                    onValueChange={(value) => handleSelectChange("categoria_id", value)}
                     required
                   >
-                    <SelectTrigger id="categoria">
+                    <SelectTrigger id="categoria_id">
                       <SelectValue placeholder="Selecciona una categoría" />
                     </SelectTrigger>
                     <SelectContent>
@@ -154,15 +234,14 @@ export default function NuevoProductoPage() {
                   <Select
                     value={formData.proveedor_id}
                     onValueChange={(value) => handleSelectChange("proveedor_id", value)}
-                    required
                   >
                     <SelectTrigger id="proveedor_id">
                       <SelectValue placeholder="Selecciona un proveedor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {proveedores.map((proveedor) => (
-                        <SelectItem key={proveedor.id} value={proveedor.id}>
-                          {proveedor.nombre}
+                      {proveedores.map((prov) => (
+                        <SelectItem key={prov.id} value={prov.id}>
+                          {prov.nombre}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -200,11 +279,10 @@ export default function NuevoProductoPage() {
                     step="0.01"
                     value={formData.precio_compra}
                     onChange={handleChange}
-                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="precio_venta">Precio de Venta ($)</Label>
+                  <Label htmlFor="precio_venta">Precio de Venta ($) *</Label>
                   <Input
                     id="precio_venta"
                     name="precio_venta"
@@ -220,7 +298,7 @@ export default function NuevoProductoPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="stock">Stock Inicial</Label>
+                  <Label htmlFor="stock">Stock Inicial *</Label>
                   <Input
                     id="stock"
                     name="stock"
@@ -240,7 +318,6 @@ export default function NuevoProductoPage() {
                     min="0"
                     value={formData.stock_minimo}
                     onChange={handleChange}
-                    required
                   />
                 </div>
               </div>
@@ -262,7 +339,7 @@ export default function NuevoProductoPage() {
             <Button variant="outline" type="button" asChild>
               <Link href="/dashboard/inventario">Cancelar</Link>
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || loadingData}>
               {loading ? "Guardando..." : "Guardar Producto"}
             </Button>
           </div>

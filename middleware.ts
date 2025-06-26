@@ -1,25 +1,12 @@
 import { NextResponse } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import type { NextRequest } from "next/server";
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const pathname = req.nextUrl.pathname;
-
-  if (!user && pathname.startsWith("/dashboard")) {
-    return NextResponse.redirect(new URL("/auth/login", req.url));
-  }
-
-  return res;
+export function middleware(request: NextRequest) {
+  // Aquí puedes aplicar lógica de autenticación, redirección, etc.
+  return NextResponse.next();
 }
 
+// Opcionalmente, puedes definir qué rutas usarán este middleware
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/admin/:path*"], // ajusta según tus rutas
 };
-

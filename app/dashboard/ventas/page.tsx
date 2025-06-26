@@ -1,412 +1,332 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
-import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
-import {
-  ChevronDown,
-  Download,
-  FileText,
-  MoreHorizontal,
-  Plus,
-  Printer,
-  Search,
-  SlidersHorizontal,
-  X,
-  Eye,
-  RefreshCw,
-} from "lucide-react"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { DatePickerWithRange } from "@/components/dashboard/date-range-picker"
-import { format, subDays, isWithinInterval, parseISO } from "date-fns"
-import { toast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { ChevronDown, Download, FileText, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, X, Eye, RefreshCw } from "lucide-react";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { DatePickerWithRange } from "@/components/dashboard/date-range-picker";
+import { format, subDays } from "date-fns";
+import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";
 
-// Tipos
 interface Venta {
-  id: string
-  fecha_venta: string
-  cliente_nombre: string | null
-  cliente_id: string | null
-  total: number
-  metodo_pago: string
-  estado: string
-  usuario: string
-  descuento_general: number
-  descuento_tipo: string
-  notas?: string
-  productos_venta: ProductoVendido[]
+  id: string;
+  fecha_venta: string;
+  cliente_nombre: string;
+  cliente_id: string | null;
+  total: number;
+  metodo_pago: string;
+  estado: string;
+  usuario: string;
+  productos_venta: ProductoVendido[];
 }
 
 interface ProductoVendido {
-  id: string
-  producto_id: string
-  nombre: string
-  precio: number
-  cantidad: number
-  descuento: number
-  descuento_tipo: string
-  subtotal: number
+  id: string;
+  producto_id: string;
+  nombre: string;
+  precio: number;
+  cantidad: number;
+  subtotal: number;
 }
 
 interface Cliente {
-  id: string
-  nombre: string
-  email: string | null
-  telefono: string | null
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
 }
 
 export default function VentasPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // Estados para filtros
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
     from: subDays(new Date(), 30),
     to: new Date(),
-  })
-  const [metodoPago, setMetodoPago] = useState<string>("todos")
-  const [estado, setEstado] = useState<string>("todos")
-  const [vendedor, setVendedor] = useState<string>("todos")
-  const [clienteSeleccionado, setClienteSeleccionado] = useState<string>("todos")
-  const [montoMinimo, setMontoMinimo] = useState<string>("")
-  const [montoMaximo, setMontoMaximo] = useState<string>("")
+  });
+  const [metodoPago, setMetodoPago] = useState<string>("todos");
+  const [estado, setEstado] = useState<string>("todos");
+  const [vendedor, setVendedor] = useState<string>("todos");
+  const [vendedores, setVendedores] = useState<string[]>([]);
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<string>("todos");
+  const [montoMinimo, setMontoMinimo] = useState<string>("");
+  const [montoMaximo, setMontoMaximo] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [sortField, setSortField] = useState<string>("fecha_venta");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [allVentas, setAllVentas] = useState<Venta[]>([]);
+  const [ventasFiltradas, setVentasFiltradas] = useState<Venta[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
 
-  // Estado para paginación
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const fetchSalesData = async () => {
+    setLoading(true);
+    try {
+      const { data: ventasData, error } = await supabase
+        .from('ventas')
+        .select(`
+          id,
+          fecha_venta,
+          cliente_id,
+          clientes:clientes(nombre),
+          total,
+          metodo_pago,
+          estado,
+          usuario,
+          detalle_venta(
+            id,
+            producto_id,
+            cantidad,
+            precio_unitario,
+            subtotal,
+            productos:productos(nombre, precio)
+          )
+        `)
+        .order('fecha_venta', { ascending: false });
 
-  // Estado para ordenamiento
-  const [sortField, setSortField] = useState<string>("fecha_venta")
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+      if (error) throw error;
 
-  // Estado para vista (tabla o tarjetas)
-  const [viewMode, setViewMode] = useState<string>("tabla")
+      const ventasConProductos = (ventasData || []).map((venta: any) => ({
+        ...venta,
+        fecha_venta: venta.fecha_venta,
+        cliente_nombre: venta.clientes?.nombre || 'Cliente no especificado',
+        productos_venta: venta.detalle_venta?.map((detalle: any) => ({
+          id: detalle.id,
+          producto_id: detalle.producto_id,
+          nombre: detalle.productos?.nombre || 'Producto desconocido',
+          precio: detalle.precio_unitario || 0,
+          cantidad: detalle.cantidad || 0,
+          subtotal: detalle.subtotal || 0
+        })) || []
+      }));
 
-  // Estado para mostrar/ocultar filtros avanzados
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+      setAllVentas(ventasConProductos);
+      setVentasFiltradas(ventasConProductos);
+    } catch (error: any) {
+      console.error('Error fetching sales:', error);
+      toast({
+        title: "Error",
+        description: `Error al cargar ventas: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Estado para ventas filtradas
-  const [ventasFiltradas, setVentasFiltradas] = useState<Venta[]>([])
-  const [loading, setLoading] = useState(false)
-  const [clientes, setClientes] = useState<Cliente[]>([])
+  const fetchClientsData = async () => {
+    try {
+      const { data: clientesData, error } = await supabase
+        .from('clientes')
+        .select('id, nombre, email, telefono')
+        .order('nombre', { ascending: true });
 
-  // Cargar datos de Supabase
+      if (error) throw error;
+      setClientes(clientesData || []);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: `Error al cargar clientes: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchVendedores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('usuario')
+        .not('usuario', 'is', null);
+      if (error) throw error;
+      const uniqueVendedores = [...new Set(data?.map((venta: any) => venta.usuario))];
+      setVendedores(uniqueVendedores);
+    } catch (error: any) {
+      console.error('Error fetching vendedores:', error);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
+    fetchSalesData();
+    fetchClientsData();
+    fetchVendedores();
+  }, []);
 
-      try {
-        // Cargar ventas con productos_venta e inventario
-        const { data: ventasData, error: ventasError } = await supabase
-          .from("ventas")
-          .select(`
-            *
-          `)
-          .order("fecha_venta", { ascending: false })
-
-        if (ventasError) throw ventasError
-
-        // Transformar datos para incluir productos con descuentos
-        const ventasConProductos: Venta[] = ventasData.map((venta) => ({
-          ...venta,
-          fecha_venta: venta.fecha_venta,
-          productos_venta: venta.productos_venta.map((pv: any) => ({
-            id: pv.id,
-            producto_id: pv.producto_id,
-            nombre: pv.inventario?.nombre || "Producto desconocido",
-            precio: pv.inventario?.precio || pv.precio_final,
-            cantidad: pv.cantidad,
-            descuento: 0, // Ajustar según tu lógica de descuento
-            descuento_tipo: "monto", // Ajustar según tu esquema
-            subtotal: pv.cantidad * pv.precio_final,
-          })),
-        }))
-
-        setVentasFiltradas(ventasConProductos)
-
-        // Cargar clientes
-        const { data: clientesData, error: clientesError } = await supabase
-          .from("clientes")
-          .select("id, nombre, email, telefono")
-
-        if (clientesError) throw clientesError
-        setClientes(clientesData || [])
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: `No se pudieron cargar los datos: ${error.message}`,
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [])
-
-  // Efecto para aplicar filtros
-  useEffect(() => {
-    setLoading(true)
-
-    let filtered = [...ventasFiltradas]
-
-    // Filtro por búsqueda (ID, cliente)
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(
-        (venta) =>
-          venta.id.toLowerCase().includes(query) ||
-          (venta.cliente_nombre && venta.cliente_nombre.toLowerCase().includes(query)),
-      )
-    }
-
-    // Filtro por rango de fechas
-    if (dateRange?.from && dateRange?.to) {
-      filtered = filtered.filter((venta) => {
-        const ventaDate = parseISO(venta.fecha_venta)
-        return isWithinInterval(ventaDate, { start: dateRange.from, end: dateRange.to })
-      })
-    }
-
-    // Filtro por método de pago
-    if (metodoPago !== "todos") {
-      filtered = filtered.filter((venta) => venta.metodo_pago === metodoPago)
-    }
-
-    // Filtro por estado
-    if (estado !== "todos") {
-      filtered = filtered.filter((venta) => venta.estado === estado)
-    }
-
-    // Filtro por vendedor
-    if (vendedor !== "todos") {
-      filtered = filtered.filter((venta) => venta.usuario === vendedor)
-    }
-
-    // Filtro por monto mínimo
-    if (montoMinimo) {
-      filtered = filtered.filter((venta) => venta.total >= Number.parseFloat(montoMinimo))
-    }
-
-    // Filtro por monto máximo
-    if (montoMaximo) {
-      filtered = filtered.filter((venta) => venta.total <= Number.parseFloat(montoMaximo))
-    }
-
-    // Filtro por cliente
-    if (clienteSeleccionado !== "todos") {
-      filtered = filtered.filter((venta) => venta.cliente_id === clienteSeleccionado)
-    }
-
-    // Ordenar resultados
-    filtered.sort((a, b) => {
-      let comparison = 0
-
-      switch (sortField) {
-        case "fecha_venta":
-          comparison = new Date(a.fecha_venta).getTime() - new Date(b.fecha_venta).getTime()
-          break
-        case "id":
-          comparison = a.id.localeCompare(b.id)
-          break
-        case "cliente_nombre":
-          const clienteA = a.cliente_nombre || ""
-          const clienteB = b.cliente_nombre || ""
-          comparison = clienteA.localeCompare(clienteB)
-          break
-        case "total":
-          comparison = a.total - b.total
-          break
-        default:
-          comparison = 0
-      }
-
-      return sortDirection === "asc" ? comparison : -comparison
-    })
-
-    setVentasFiltradas(filtered)
-    setLoading(false)
-  }, [
-    searchQuery,
-    dateRange,
-    metodoPago,
-    estado,
-    vendedor,
-    montoMinimo,
-    montoMaximo,
-    clienteSeleccionado,
-    sortField,
-    sortDirection,
-  ])
-
-  // Calcular paginación
-  const totalPages = Math.ceil(ventasFiltradas.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedVentas = ventasFiltradas.slice(startIndex, startIndex + itemsPerPage)
-
-  // Función para limpiar todos los filtros
-  const clearAllFilters = () => {
-    setSearchQuery("")
-    setDateRange({ from: subDays(new Date(), 30), to: new Date() })
-    setMetodoPago("todos")
-    setEstado("todos")
-    setVendedor("todos")
-    setClienteSeleccionado("todos")
-    setMontoMinimo("")
-    setMontoMaximo("")
-    setCurrentPage(1)
-  }
-
-  // Función para exportar a CSV
-  const exportToCSV = () => {
-    const csvContent = [
-      ["ID", "Fecha", "Cliente", "Total", "Método de Pago", "Estado", "Vendedor"].join(","),
-      ...ventasFiltradas.map((venta) =>
-        [
-          venta.id,
-          format(new Date(venta.fecha_venta), "dd/MM/yyyy HH:mm"),
-          venta.cliente_nombre || "Cliente anónimo",
-          venta.total.toFixed(2),
-          venta.metodo_pago,
-          venta.estado,
-          venta.usuario,
-        ].join(","),
-      ),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `ventas_${format(new Date(), "yyyy-MM-dd")}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    toast({
-      title: "Exportación completada",
-      description: `Se exportaron ${ventasFiltradas.length} registros a CSV`,
-    })
-  }
-
-  // Función para cambiar el ordenamiento
   const handleSort = (field: string) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      setSortField(field)
-      setSortDirection("asc")
+      setSortField(field);
+      setSortDirection("asc");
     }
-  }
+  };
 
-  // Renderizar indicador de ordenamiento
-  const renderSortIndicator = (field: string) => {
-    if (sortField !== field) return null
-    return <span className="ml-1">{sortDirection === "asc" ? "↑" : "↓"}</span>
-  }
+  useEffect(() => {
+    setLoading(true);
+    let filtered = [...allVentas];
 
-  // Función para anular venta
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(venta => 
+        venta.id.toLowerCase().includes(query) || 
+        venta.cliente_nombre.toLowerCase().includes(query)
+      );
+    }
+
+    if (dateRange?.from && dateRange?.to) {
+      filtered = filtered.filter(venta => {
+        const ventaDate = new Date(venta.fecha_venta);
+        return ventaDate >= dateRange.from && ventaDate <= dateRange.to;
+      });
+    }
+
+    if (metodoPago !== "todos") {
+      filtered = filtered.filter(venta => venta.metodo_pago === metodoPago);
+    }
+
+    if (estado !== "todos") {
+      filtered = filtered.filter(venta => venta.estado === estado);
+    }
+
+    if (vendedor !== "todos") {
+      filtered = filtered.filter(venta => venta.usuario === vendedor);
+    }
+
+    if (montoMinimo) {
+      filtered = filtered.filter(venta => venta.total >= Number(montoMinimo));
+    }
+
+    if (montoMaximo) {
+      filtered = filtered.filter(venta => venta.total <= Number(montoMaximo));
+    }
+
+    if (clienteSeleccionado !== "todos") {
+      filtered = filtered.filter(venta => venta.cliente_id === clienteSeleccionado);
+    }
+
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case "fecha_venta":
+          comparison = new Date(a.fecha_venta).getTime() - new Date(b.fecha_venta).getTime();
+          break;
+        case "id":
+          comparison = a.id.localeCompare(b.id);
+          break;
+        case "cliente_nombre":
+          comparison = (a.cliente_nombre || "").localeCompare(b.cliente_nombre || "");
+          break;
+        case "total":
+          comparison = a.total - b.total;
+          break;
+      }
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    setVentasFiltradas(filtered);
+    setCurrentPage(1);
+    setLoading(false);
+  }, [searchQuery, dateRange, metodoPago, estado, vendedor, montoMinimo, montoMaximo, clienteSeleccionado, sortField, sortDirection, allVentas]);
+
+  const totalPages = Math.ceil(ventasFiltradas.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedVentas = ventasFiltradas.slice(startIndex, startIndex + itemsPerPage);
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setDateRange({ from: subDays(new Date(), 30), to: new Date() });
+    setMetodoPago("todos");
+    setEstado("todos");
+    setVendedor("todos");
+    setClienteSeleccionado("todos");
+    setMontoMinimo("");
+    setMontoMaximo("");
+  };
+
+  const exportToCSV = () => {
+    const headers = ["ID", "Fecha", "Cliente", "Total", "Método Pago", "Estado", "Vendedor"];
+    const rows = ventasFiltradas.map(venta => [
+      venta.id,
+      format(new Date(venta.fecha_venta), "dd/MM/yyyy HH:mm"),
+      venta.cliente_nombre,
+      venta.total.toFixed(2),
+      venta.metodo_pago,
+      venta.estado,
+      venta.usuario
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ventas_${format(new Date(), "yyyy-MM-dd")}.csv`);
+    link.click();
+    
+    toast({
+      title: "Exportación completada",
+      description: `Se exportaron ${ventasFiltradas.length} registros`,
+    });
+  };
+
   const anularVenta = async (ventaId: string) => {
-    if (!confirm("¿Está seguro que desea anular esta venta?")) return
+    if (!confirm("¿Está seguro que desea anular esta venta?")) return;
 
     try {
       const { error } = await supabase
         .from("ventas")
         .update({ estado: "anulada" })
-        .eq("id", ventaId)
+        .eq("id", ventaId);
 
-      if (error) throw error
+      if (error) throw error;
 
       toast({
         title: "Venta anulada",
         description: `La venta ${ventaId} ha sido anulada correctamente.`,
-      })
+      });
 
-      // Recargar datos
-      const { data: updatedVentas, error: fetchError } = await supabase
-        .from("ventas")
-        .select(`
-          id,
-          fecha_venta,
-          cliente_nombre,
-          cliente_id,
-          total,
-          metodo_pago,
-          estado,
-          usuario,
-          descuento_general,
-          descuento_tipo,
-          notas,
-          productos_venta (
-            id,
-            producto_id,
-            cantidad,
-            precio_final,
-            inventario (nombre, precio)
-          )
-        `)
-        .order("fecha_venta", { ascending: false })
-
-      if (fetchError) throw fetchError
-
-      const ventasConProductos: Venta[] = updatedVentas.map((venta) => ({
-        ...venta,
-        fecha_venta: venta.fecha_venta,
-        productos_venta: venta.productos_venta.map((pv: any) => ({
-          id: pv.id,
-          producto_id: pv.producto_id,
-          nombre: pv.inventario?.nombre || "Producto desconocido",
-          precio: pv.inventario?.precio || pv.precio_final,
-          cantidad: pv.cantidad,
-          descuento: 0,
-          descuento_tipo: "monto",
-          subtotal: pv.cantidad * pv.precio_final,
-        })),
-      }))
-
-      setVentasFiltradas(ventasConProductos)
+      await fetchSalesData();
     } catch (error: any) {
       toast({
         title: "Error",
         description: `No se pudo anular la venta: ${error.message}`,
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
-  // Calcular estadísticas
+  const renderSortIndicator = (field: string) => {
+    if (sortField !== field) return null;
+    return <span className="ml-1">{sortDirection === "asc" ? "↑" : "↓"}</span>;
+  };
+
   const estadisticas = {
     totalVentas: ventasFiltradas.length,
-    ventasCompletadas: ventasFiltradas.filter((v) => v.estado === "completada").length,
-    ventasAnuladas: ventasFiltradas.filter((v) => v.estado === "anulada").length,
-    ventasPendientes: ventasFiltradas.filter((v) => v.estado === "pendiente").length,
-    montoTotal: ventasFiltradas.filter((v) => v.estado === "completada").reduce((sum, v) => sum + v.total, 0),
+    ventasCompletadas: ventasFiltradas.filter(v => v.estado === "completada").length,
+    ventasAnuladas: ventasFiltradas.filter(v => v.estado === "anulada").length,
+    ventasPendientes: ventasFiltradas.filter(v => v.estado === "pendiente").length,
+    montoTotal: ventasFiltradas
+      .filter(v => v.estado === "completada")
+      .reduce((sum, v) => sum + v.total, 0),
     promedioVenta:
-      ventasFiltradas.filter((v) => v.estado === "completada").length > 0
-        ? ventasFiltradas.filter((v) => v.estado === "completada").reduce((sum, v) => sum + v.total, 0) /
-          ventasFiltradas.filter((v) => v.estado === "completada").length
+      ventasFiltradas.filter(v => v.estado === "completada").length > 0
+        ? ventasFiltradas
+            .filter(v => v.estado === "completada")
+            .reduce((sum, v) => sum + v.total, 0) /
+          ventasFiltradas.filter(v => v.estado === "completada").length
         : 0,
-  }
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -448,7 +368,6 @@ export default function VentasPage() {
         </div>
       </div>
 
-      {/* Estadísticas rápidas */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -493,7 +412,6 @@ export default function VentasPage() {
         </Card>
       </div>
 
-      {/* Filtros básicos */}
       <div className="flex flex-col gap-4 md:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -506,7 +424,11 @@ export default function VentasPage() {
           />
         </div>
 
-        <DatePickerWithRange date={dateRange} setDate={setDateRange} className="w-full md:w-auto" />
+        <DatePickerWithRange 
+          date={dateRange} 
+          setDate={setDateRange} 
+          className="w-full md:w-auto" 
+        />
 
         <Button variant="outline" onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}>
           <SlidersHorizontal className="mr-2 h-4 w-4" />
@@ -516,10 +438,7 @@ export default function VentasPage() {
 
         <Select
           value={itemsPerPage.toString()}
-          onValueChange={(value) => {
-            setItemsPerPage(Number.parseInt(value))
-            setCurrentPage(1)
-          }}
+          onValueChange={(value) => setItemsPerPage(Number(value))}
         >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Mostrar" />
@@ -533,7 +452,6 @@ export default function VentasPage() {
         </Select>
       </div>
 
-      {/* Filtros avanzados */}
       {showAdvancedFilters && (
         <Card>
           <CardHeader className="pb-3">
@@ -585,9 +503,11 @@ export default function VentasPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                    <SelectItem value="Vendedor1">Vendedor 1</SelectItem>
-                    <SelectItem value="Vendedor2">Vendedor 2</SelectItem>
+                    {vendedores.map((vend) => (
+                      <SelectItem key={vend} value={vend}>
+                        {vend}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -635,7 +555,6 @@ export default function VentasPage() {
         </Card>
       )}
 
-      {/* Tabla de ventas */}
       <Card>
         <CardContent className="p-0">
           {loading ? (
@@ -669,20 +588,22 @@ export default function VentasPage() {
                 {paginatedVentas.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
-                      No se encontraron ventas que coincidan con los criterios de búsqueda.
+                      {allVentas.length === 0 
+                        ? "No se encontraron ventas" 
+                        : "No hay ventas que coincidan con los filtros"}
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedVentas.map((venta) => (
                     <TableRow key={venta.id} className={venta.estado === "anulada" ? "bg-red-50" : ""}>
-                      <TableCell className="font-medium">{venta.id}</TableCell>
+                      <TableCell className="font-medium">{venta.id.substring(0, 8)}...</TableCell>
                       <TableCell>{format(new Date(venta.fecha_venta), "dd/MM/yyyy HH:mm")}</TableCell>
-                      <TableCell>{venta.cliente_nombre || "Cliente anónimo"}</TableCell>
+                      <TableCell>{venta.cliente_nombre}</TableCell>
                       <TableCell className="text-right">
                         ${venta.total.toFixed(2)}
-                        {(venta.descuento_general > 0 || venta.productos_venta.some((p) => p.descuento > 0)) && (
+                        {venta.productos_venta.some(p => p.precio > 0) && (
                           <Badge variant="outline" className="ml-2 bg-green-50">
-                            Con descuento
+                            Con productos
                           </Badge>
                         )}
                       </TableCell>
@@ -716,16 +637,19 @@ export default function VentasPage() {
                                 Ver detalles
                               </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toast({ title: "Próximamente", description: "Función en desarrollo" })}>
                               <Printer className="mr-2 h-4 w-4" />
                               Imprimir recibo
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toast({ title: "Próximamente", description: "Función en desarrollo" })}>
                               <FileText className="mr-2 h-4 w-4" />
                               Generar factura
                             </DropdownMenuItem>
                             {venta.estado === "completada" && (
-                              <DropdownMenuItem className="text-red-600" onClick={() => anularVenta(venta.id)}>
+                              <DropdownMenuItem 
+                                className="text-red-600" 
+                                onClick={() => anularVenta(venta.id)}
+                              >
                                 <X className="mr-2 h-4 w-4" />
                                 Anular venta
                               </DropdownMenuItem>
@@ -742,7 +666,6 @@ export default function VentasPage() {
         </CardContent>
       </Card>
 
-      {/* Paginación */}
       {ventasFiltradas.length > 0 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
@@ -750,29 +673,29 @@ export default function VentasPage() {
             {ventasFiltradas.length} ventas
           </div>
 
-          <Pagination className="mx-auto">
+          <Pagination>
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
                   href="#"
                   onClick={(e) => {
-                    e.preventDefault()
-                    if (currentPage > 1) setCurrentPage(currentPage - 1)
+                    e.preventDefault();
+                    if (currentPage > 1) setCurrentPage(currentPage - 1);
                   }}
                   className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
                 />
               </PaginationItem>
 
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum
+                let pageNum;
                 if (totalPages <= 5) {
-                  pageNum = i + 1
+                  pageNum = i + 1;
                 } else if (currentPage <= 3) {
-                  pageNum = i + 1
+                  pageNum = i + 1;
                 } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
+                  pageNum = totalPages - 4 + i;
                 } else {
-                  pageNum = currentPage - 2 + i
+                  pageNum = currentPage - 2 + i;
                 }
 
                 return (
@@ -780,23 +703,23 @@ export default function VentasPage() {
                     <PaginationLink
                       href="#"
                       onClick={(e) => {
-                        e.preventDefault()
-                        setCurrentPage(pageNum)
+                        e.preventDefault();
+                        setCurrentPage(pageNum);
                       }}
                       isActive={currentPage === pageNum}
                     >
                       {pageNum}
                     </PaginationLink>
                   </PaginationItem>
-                )
+                );
               })}
 
               <PaginationItem>
                 <PaginationNext
                   href="#"
                   onClick={(e) => {
-                    e.preventDefault()
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1)
+                    e.preventDefault();
+                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
                   }}
                   className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
                 />
@@ -806,5 +729,5 @@ export default function VentasPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

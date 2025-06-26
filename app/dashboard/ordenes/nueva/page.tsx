@@ -16,9 +16,67 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 
 const fetchOptions = async (table: string) => {
-  const { data, error } = await supabase.from(table).select("id, nombre");
-  if (error) console.error(`Error fetching ${table}:`, error);
-  return data || [];
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error("Error: Usuario no autenticado", authError?.message || "No user");
+    toast({ title: "Error", description: "Debes iniciar sesión para cargar datos.", variant: "destructive" });
+    return [];
+  }
+
+  const { data: usuario, error: userError } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+
+  if (userError || !usuario) {
+    console.error("Error fetching usuario:", userError?.message || "No usuario data");
+    toast({ title: "Error", description: "No se pudo obtener la empresa del usuario.", variant: "destructive" });
+    return [];
+  }
+
+  const empresaId = usuario.empresa_id;
+
+  let data: { id: string; nombre: string }[] = [];
+  let error: any = null;
+
+  if (table === "clientes") {
+    const result = await supabase
+      .from("clientes")
+      .select("id, nombre")
+      .eq("empresa_id", empresaId);
+    data = result.data || [];
+    error = result.error;
+  } else if (table === "empleados") {
+    const { data: usuarios, error: usuariosError } = await supabase
+      .from("usuarios")
+      .select("id")
+      .eq("empresa_id", empresaId);
+
+    if (usuariosError) {
+      console.error("Error fetching usuarios for empleados:", usuariosError.message || usuariosError);
+      toast({ title: "Error", description: "No se pudieron cargar los usuarios para empleados.", variant: "destructive" });
+      return [];
+    }
+
+    const usuarioIds = usuarios?.map((u) => u.id) || [];
+
+    const result = await supabase
+      .from("empleados")
+      .select("id, nombre")
+      .in("usuario_id", usuarioIds);
+    data = result.data || [];
+    error = result.error;
+  }
+
+  if (error) {
+    console.error(`Error fetching ${table}:`, error.message || error);
+    toast({ title: "Error", description: `No se pudieron cargar los ${table}.`, variant: "destructive" });
+    return [];
+  }
+
+  console.log(`${table} cargados:`, data); // Para depuración
+  return data;
 };
 
 export default function NuevaOrdenPage() {
@@ -35,7 +93,7 @@ export default function NuevaOrdenPage() {
   const [newClient, setNewClient] = useState({
     nombre: "",
     telefono: "",
-    correo: "",
+    email: "",
     tipo_documento: "",
     numero_documento: "",
     direccion: "",
@@ -52,6 +110,12 @@ export default function NuevaOrdenPage() {
       const tecnicosData = await fetchOptions("empleados");
       setClientes(clientesData);
       setTecnicos(tecnicosData);
+      if (clientesData.length === 0) {
+        toast({ title: "Advertencia", description: "No se encontraron clientes. Crea un cliente nuevo.", variant: "default" });
+      }
+      if (tecnicosData.length === 0) {
+        toast({ title: "Advertencia", description: "No se encontraron técnicos.", variant: "default" });
+      }
     };
     loadOptions();
   }, []);
@@ -91,6 +155,7 @@ export default function NuevaOrdenPage() {
     setLoading(true);
 
     try {
+      // Validar costo estimado
       const costoEstimado = parseFloat(formData.costo_estimado);
       if (isNaN(costoEstimado) || costoEstimado < 0) {
         toast({ title: "Error", description: "El costo estimado debe ser un número válido.", variant: "destructive" });
@@ -98,14 +163,37 @@ export default function NuevaOrdenPage() {
         return;
       }
 
+      // Obtener el usuario autenticado
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      // Obtener la empresa_id del usuario
+      const { data: usuario, error: userError } = await supabase
+        .from("usuarios")
+        .select("empresa_id")
+        .eq("id", user.id)
+        .single();
+
+      if (userError || !usuario) {
+        toast({ title: "Error", description: "No se pudo obtener la empresa del usuario.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      const empresaId = usuario.empresa_id;
+
       let clienteId = formData.cliente_id;
 
       // Si se está registrando un cliente nuevo
       if (showNewClientForm) {
-        if (!newClient.nombre || !newClient.telefono || !newClient.correo || !newClient.tipo_documento || !newClient.numero_documento) {
+        if (!newClient.nombre || !newClient.telefono || !newClient.email || !newClient.tipo_documento || !newClient.numero_documento) {
           toast({
             title: "Error",
-            description: "Los campos obligatorios del cliente nuevo (Nombre, Teléfono, Correo, Tipo de Documento y Número de Documento) deben estar completos.",
+            description: "Los campos obligatorios del cliente nuevo (Nombre, Teléfono, Email, Tipo de Documento y Número de Documento) deben estar completos.",
             variant: "destructive",
           });
           setLoading(false);
@@ -118,18 +206,18 @@ export default function NuevaOrdenPage() {
             id: crypto.randomUUID(),
             nombre: newClient.nombre,
             telefono: newClient.telefono,
-            correo: newClient.correo,
-            tipo_documento: newClient.tipo_documento,
-            numero_documento: newClient.numero_documento,
+            email: newClient.email,
+            cedula: newClient.numero_documento,
             direccion: newClient.direccion || null,
             notas: newClient.notas || null,
+            empresa_id: empresaId,
             created_at: new Date().toISOString(),
           })
           .select()
           .single();
 
         if (clientError) {
-          console.error("Error adding client:", clientError);
+          console.error("Error adding client:", clientError.message || clientError);
           toast({ title: "Error", description: "No se pudo registrar el cliente.", variant: "destructive" });
           setLoading(false);
           return;
@@ -147,9 +235,11 @@ export default function NuevaOrdenPage() {
       // Crear la orden
       const { error: orderError } = await supabase.from("ordenes").insert({
         cliente_id: clienteId,
+        empresa_id: empresaId,
         dispositivo: formData.dispositivo,
         modelo: formData.modelo,
-        problema: formData.problema,
+        problema_reportado: formData.problema,
+        observaciones: formData.notas,
         costo_estimado: costoEstimado,
         tecnico_asignado: formData.tecnico_asignado || null,
         notas: formData.notas || null,
@@ -158,18 +248,18 @@ export default function NuevaOrdenPage() {
       });
 
       if (orderError) {
-        console.error("Error creating order:", orderError);
+        console.error("Error creating order:", orderError.message || orderError);
         if (showNewClientForm) {
           await supabase.from("clientes").delete().eq("id", clienteId);
         }
-        throw orderError;
+        throw new Error(`No se pudo crear la orden: ${orderError.message}`);
       }
 
       toast({ title: "Éxito", description: "Orden creada correctamente." });
       router.push("/dashboard/ordenes");
-    } catch (error) {
-      console.error("Error:", error);
-      toast({ title: "Error", description: "No se pudo crear la orden.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("Error:", error.message || error);
+      toast({ title: "Error", description: error.message || "No se pudo crear la orden.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -246,9 +336,9 @@ export default function NuevaOrdenPage() {
                         <Label htmlFor="newClientCorreo">Correo *</Label>
                         <Input
                           id="newClientCorreo"
-                          name="correo"
+                          name="email"
                           type="email"
-                          value={newClient.correo}
+                          value={newClient.email}
                           onChange={handleNewClientChange}
                           required={showNewClientForm}
                         />

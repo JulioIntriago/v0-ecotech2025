@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { toast } from "@/components/ui/use-toast";
 
-// Función para traducir el estado
 function traducirEstado(estado: string) {
   const traducciones: Record<string, string> = {
     pendiente: "Pendiente",
@@ -23,7 +23,6 @@ function traducirEstado(estado: string) {
   return traducciones[estado] || estado;
 }
 
-// Función para determinar la variante del badge según el estado
 function getVariantForEstado(estado: string) {
   const variantes: Record<string, "default" | "secondary" | "success" | "outline"> = {
     pendiente: "secondary",
@@ -43,24 +42,50 @@ export default function OrdenesPage() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const { data, error } = await supabase
-  .from("ordenes")
-  .select(`*`)
-  .order("fecha_ingreso", { ascending: false });
+        // Obtener el usuario autenticado
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          throw new Error("Usuario no autenticado");
+        }
 
+        // Obtener la empresa_id del usuario
+        const { data: usuario, error: userError } = await supabase
+          .from("usuarios")
+          .select("empresa_id")
+          .eq("id", user.id)
+          .single();
+
+        if (userError || !usuario) {
+          throw new Error("No se pudo obtener la empresa del usuario");
+        }
+
+        const empresaId = usuario.empresa_id;
+
+        // Consultar órdenes con uniones a clientes y empleados
+        const { data, error } = await supabase
+          .from("ordenes")
+          .select(`
+            *,
+            clientes(nombre),
+            empleados:tecnico_asignado(nombre)
+          `)
+          .eq("empresa_id", empresaId)
+          .order("fecha_ingreso", { ascending: false });
 
         if (error) {
-          console.error('Supabase error details:', error);
-throw new Error(`Error fetching orders: ${error.message || JSON.stringify(error)}`);        } else {
-          const formattedData = data.map((orden) => ({
-            ...orden,
-            cliente_nombre: orden.clientes?.nombre || "Sin cliente",
-            tecnico_asignado: orden.tecnicos?.nombre || "Sin asignar",
-          }));
-          setOrders(formattedData || []);
+          console.error("Supabase error details:", error);
+          throw new Error(`Error al obtener órdenes: ${error.message}`);
         }
-      } catch (error) {
-        console.error("General error fetching orders:", error);
+
+        const formattedData = data.map((orden) => ({
+          ...orden,
+          cliente_nombre: orden.clientes?.nombre || "Sin cliente",
+          tecnico_asignado: orden.empleados?.nombre || "Sin asignar",
+        }));
+        setOrders(formattedData || []);
+      } catch (error: any) {
+        console.error("Error general al obtener órdenes:", error);
+        toast({ title: "Error", description: error.message || "No se pudieron cargar las órdenes.", variant: "destructive" });
       } finally {
         setLoading(false);
       }
@@ -69,7 +94,6 @@ throw new Error(`Error fetching orders: ${error.message || JSON.stringify(error)
     fetchOrders();
   }, []);
 
-  // Filtrar órdenes según búsqueda y estado
   const ordenesFiltradas = orders.filter((orden) => {
     const matchesSearch =
       orden.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -153,7 +177,7 @@ throw new Error(`Error fetching orders: ${error.message || JSON.stringify(error)
                     <TableCell className="font-medium">{orden.id}</TableCell>
                     <TableCell>{orden.cliente_nombre}</TableCell>
                     <TableCell className="hidden md:table-cell">{orden.dispositivo}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{orden.problema}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{orden.problema_reportado}</TableCell>
                     <TableCell>
                       <Badge variant={getVariantForEstado(orden.estado)}>{traducirEstado(orden.estado)}</Badge>
                     </TableCell>

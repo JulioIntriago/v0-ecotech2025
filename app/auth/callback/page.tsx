@@ -1,30 +1,39 @@
-// ✅ 4. app/auth/callback/page.tsx
 "use client";
+
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
 
 export default function AuthCallback() {
   const router = useRouter();
 
   useEffect(() => {
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.substring(1));
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
+    async function handleAuth() {
+      try {
+        console.log("Paso 0 - Processing OAuth callback");
+        const hash = window.location.hash;
+        console.log("Paso 1 - Hash:", hash);
+        if (!hash) throw new Error("No hash in URL");
 
-    if (accessToken && refreshToken) {
-      supabase.auth
-        .setSession({ access_token: accessToken, refresh_token: refreshToken })
-        .then(() => {
-          window.location.href = "/dashboard";
-        })
-        .catch(() => router.push("/auth/login"));
-    } else {
-      router.push("/auth/login");
+        // Llamar a la ruta API para manejar la sesión
+        const response = await fetch("/api/auth/callback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hash }),
+        });
+
+        const data = await response.json();
+        console.log("Paso 2 - API Response:", data);
+        if (!response.ok) throw new Error(data.error || "Error en la autenticación");
+
+        console.log("Paso 3 - Redirecting to dashboard with empresa_id:", data.empresaId);
+        router.push(`/dashboard?empresa_id=${data.empresaId}`);
+      } catch (error) {
+        console.error("Error in handleAuth:", error);
+        router.push("/auth/login");
+      }
     }
+    handleAuth();
   }, [router]);
 
   return <p>Autenticando...</p>;
 }
-

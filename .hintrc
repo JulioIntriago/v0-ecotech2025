@@ -11,7 +11,8 @@
         ]
       }
     ],
-    "typescript-config/consistent-casing": "off"
+    "typescript-config/consistent-casing": "off",
+    "axe/forms": "off"
   },
   "browserslist": [
     "defaults",

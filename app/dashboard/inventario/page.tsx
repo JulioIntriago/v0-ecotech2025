@@ -4,15 +4,38 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+}
+ from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Eye, Edit, Trash } from "lucide-react"; // Añadimos Eye, Edit y Trash
+import { Plus, Search, Eye } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { supabase } from "@/lib/supabase";
+import { useEmpresa } from "@/app/context/empresa-context";
+import { toast } from "@/components/ui/use-toast";
 
 interface Categoria {
+  id: number;
   nombre: string;
 }
 
@@ -23,18 +46,28 @@ interface Producto {
   stock: number;
   stock_minimo: number;
   categoria_id: number;
-  categoria: Categoria; // Relación opcional
+  categoria: Categoria | null;
+  precio_compra: number;
 }
 
 export default function InventarioPage() {
+  const { empresaId } = useEmpresa();
   const [searchQuery, setSearchQuery] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("Todas");
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!empresaId) {
+      setLoading(false);
+      toast({ title: "Advertencia", description: "ID de empresa no disponible. Asegúrate de iniciar sesión en una empresa.", variant: "default" });
+      return;
+    }
+
     const fetchProductos = async () => {
       try {
+        // CORREGIDO: Usar el nombre exacto de la clave foránea confirmada: productos_categoria_id_fkey
+        // Asegúrate de que no haya caracteres adicionales o comentarios.
         const { data, error } = await supabase
           .from("productos")
           .select(`
@@ -44,31 +77,36 @@ export default function InventarioPage() {
             stock,
             stock_minimo,
             categoria_id,
-            categoria:categorias(nombre)
-          `);
+            precio_compra,
+            categoria:categorias!productos_categoria_id_fkey(
+              id,
+              nombre
+            )
+          `)
+          .eq("empresa_id", empresaId);
 
         if (error) {
-          console.error("Error fetching products:", error);
+          console.error("Supabase Error fetching products:", error);
+          toast({ title: "Error", description: `No se pudo cargar el inventario: ${error.message}`, variant: "destructive" });
           throw error;
         }
 
-        console.log("Datos de Supabase:", data); // Depuración
-        const processedData = data.map((item) => ({
-          ...item,
-          categoria: item.categoria?.[0] || { nombre: "Sin categoría" },
-        }));
-        setProductos(processedData);
-      } catch (error) {
+        setProductos(data);
+      } catch (error: any) {
         console.error("Error fetching products:", error);
+        toast({ title: "Error", description: `No se pudo cargar el inventario: ${error.message}`, variant: "destructive" });
       } finally {
         setLoading(false);
       }
     };
 
     fetchProductos();
-  }, []);
+  }, [empresaId]);
 
-  const categorias = ["Todas", ...new Set(productos.map((p) => p.categoria.nombre))];
+  const categorias = [
+    "Todas",
+    ...new Set(productos.map((p) => p.categoria?.nombre ?? "Sin categoría")),
+  ];
 
   function getEstadoStock(stock: number, stockMinimo: number) {
     if (stock === 0) return "agotado";
@@ -76,17 +114,17 @@ export default function InventarioPage() {
     return "normal";
   }
 
-  function getVariantForStock(estado: "normal" | "bajo" | "agotado"): "default" | "secondary" | "destructive" {
-    const variantes: Record<"normal" | "bajo" | "agotado", "default" | "secondary" | "destructive"> = {
+  function getVariantForStock(estado: "normal" | "bajo" | "agotado") {
+    const variantes = {
       normal: "default",
       bajo: "secondary",
       agotado: "destructive",
-    };
+    } as const;
     return variantes[estado];
   }
 
-  function traducirEstadoStock(estado: "normal" | "bajo" | "agotado"): string {
-    const traducciones: Record<"normal" | "bajo" | "agotado", string> = {
+  function traducirEstadoStock(estado: "normal" | "bajo" | "agotado") {
+    const traducciones = {
       normal: "En Stock",
       bajo: "Stock Bajo",
       agotado: "Agotado",
@@ -95,12 +133,13 @@ export default function InventarioPage() {
   }
 
   const productosFiltrados = productos.filter((producto) => {
-    const idString = producto.id.toString();
     const matchesSearch =
-      idString.includes(searchQuery.toLowerCase()) ||
+      producto.id.toString().includes(searchQuery.toLowerCase()) ||
       producto.nombre.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategoria = filtroCategoria === "Todas" || producto.categoria.nombre === filtroCategoria;
+    const categoriaNombre = producto.categoria?.nombre ?? "Sin categoría";
+    const matchesCategoria =
+      filtroCategoria === "Todas" || categoriaNombre === filtroCategoria;
 
     return matchesSearch && matchesCategoria;
   });
@@ -110,6 +149,7 @@ export default function InventarioPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <DashboardHeader />
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold tracking-tight">Inventario</h2>
         <Button asChild>
@@ -131,6 +171,7 @@ export default function InventarioPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+
         <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filtrar por categoría" />
@@ -148,7 +189,9 @@ export default function InventarioPage() {
       <Card>
         <CardHeader>
           <CardTitle>Listado de Productos</CardTitle>
-          <CardDescription>Gestiona el inventario de productos y repuestos</CardDescription>
+          <CardDescription>
+            Gestiona el inventario de productos y repuestos
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -170,16 +213,25 @@ export default function InventarioPage() {
                 </TableRow>
               ) : (
                 productosFiltrados.map((producto) => {
-                  const estadoStock = getEstadoStock(producto.stock, producto.stock_minimo || 0);
+                  const estadoStock = getEstadoStock(
+                    producto.stock,
+                    producto.stock_minimo || 0
+                  );
                   return (
                     <TableRow key={producto.id}>
                       <TableCell>{producto.nombre}</TableCell>
-                      <TableCell className="hidden md:table-cell">{producto.categoria.nombre}</TableCell>
-                      <TableCell className="text-right">${producto.precio.toFixed(2)}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {producto.categoria?.nombre ?? "Sin categoría"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${producto.precio.toFixed(2)}
+                      </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span>{producto.stock}</span>
-                          <Badge variant={getVariantForStock(estadoStock)}>{traducirEstadoStock(estadoStock)}</Badge>
+                          <Badge variant={getVariantForStock(estadoStock)}>
+                            {traducirEstadoStock(estadoStock)}
+                          </Badge>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
@@ -190,7 +242,6 @@ export default function InventarioPage() {
                               Detalles
                             </Link>
                           </Button>
-                        
                         </div>
                       </TableCell>
                     </TableRow>

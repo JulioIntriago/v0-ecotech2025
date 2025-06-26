@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { use } from "react"; // Importamos use para desempaquetar la Promise
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -70,7 +71,7 @@ function getVariantForEstado(estado: string) {
   return variantes[estado] || "default";
 }
 
-export default function DetalleOrdenPage({ params }: { params: { id: string } }) {
+export default function DetalleOrdenPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
@@ -78,13 +79,16 @@ export default function DetalleOrdenPage({ params }: { params: { id: string } })
   const [comentario, setComentario] = useState("");
   const [orden, setOrden] = useState<Orden | null>(null);
 
+  // Desempaquetamos params con React.use para obtener el id
+  const { id } = use(params);
+
   useEffect(() => {
     const fetchOrder = async () => {
       try {
         const { data, error } = await supabase
           .from("ordenes")
           .select("*")
-          .eq("id", params.id)
+          .eq("id", id) // Usamos id desempaquetado
           .single();
 
         if (error) throw error;
@@ -98,7 +102,7 @@ export default function DetalleOrdenPage({ params }: { params: { id: string } })
       }
     };
     fetchOrder();
-  }, [params.id]);
+  }, [id]); // Dependencia en id
 
   const handleActualizarEstado = async () => {
     setLoading(true);
@@ -106,7 +110,7 @@ export default function DetalleOrdenPage({ params }: { params: { id: string } })
       const { error } = await supabase
         .from("ordenes")
         .update({ estado: nuevoEstado, notas: comentario || orden?.notas })
-        .eq("id", params.id);
+        .eq("id", id); // Usamos id desempaquetado
 
       if (error) throw error;
 
@@ -125,7 +129,7 @@ export default function DetalleOrdenPage({ params }: { params: { id: string } })
     if (confirm("¿Estás seguro de que deseas eliminar esta orden? Esta acción no se puede deshacer.")) {
       setLoading(true);
       try {
-        const { error } = await supabase.from("ordenes").delete().eq("id", params.id);
+        const { error } = await supabase.from("ordenes").delete().eq("id", id); // Usamos id desempaquetado
         if (error) throw error;
         router.push("/dashboard/ordenes");
         toast({ title: "Éxito", description: "Orden eliminada correctamente." });
@@ -151,7 +155,7 @@ export default function DetalleOrdenPage({ params }: { params: { id: string } })
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <h2 className="text-2xl font-bold tracking-tight">Orden #{params.id}</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Orden #{id}</h2> {/* Usamos id */}
           <Badge variant={getVariantForEstado(orden.estado)}>{traducirEstado(orden.estado)}</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -160,7 +164,7 @@ export default function DetalleOrdenPage({ params }: { params: { id: string } })
             Imprimir
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/ordenes/${params.id}/editar`}>
+            <Link href={`/dashboard/ordenes/${id}/editar`}> {/* Usamos id */}
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </Link>

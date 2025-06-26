@@ -3,38 +3,65 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
-import { DateRange } from "react-day-picker"; // Importación corregida
+import { DateRange as ReactDayPickerRange } from "react-day-picker";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-// Definimos las props del componente
+// Definimos nuestro propio tipo DateRange para independencia del sistema
+export interface DateRange {
+  from: Date;
+  to: Date;
+  empresaId?: string; // Para soporte multiempresa
+}
+
 interface DatePickerWithRangeProps {
   className?: string;
   date?: DateRange | undefined;
-  setDate?: React.Dispatch<React.SetStateAction<DateRange | undefined>>;
+  setDate?: (range: DateRange | undefined) => void;
+  disabled?: boolean;
+  empresaId?: string; // Identificador de empresa
 }
 
-// Exportamos el tipo DateRange para que otros componentes puedan usarlo
-export type { DateRange };
-
-export function DatePickerWithRange({ className, date, setDate }: DatePickerWithRangeProps) {
-  // Estado local para manejar el rango de fechas
+export function DatePickerWithRange({ 
+  className, 
+  date, 
+  setDate,
+  disabled = false,
+  empresaId 
+}: DatePickerWithRangeProps) {
   const [dateValue, setDateValue] = React.useState<DateRange | undefined>(date);
 
-  // Sincronizamos el estado local con la prop date cuando cambia
+  // Sincronización con cambios externos y validación multiempresa
   React.useEffect(() => {
-    setDateValue(date);
-  }, [date]);
-
-  // Manejar el cambio de fechas
-  const handleDateChange = (newDate: DateRange | undefined) => {
-    setDateValue(newDate);
-    if (setDate) {
-      setDate(newDate);
+    if (date && (!empresaId || date.empresaId === empresaId)) {
+      setDateValue(date);
     }
+  }, [date, empresaId]);
+
+  const handleDateChange = (newDate: ReactDayPickerRange | undefined) => {
+    if (!newDate || !newDate.from) {
+      setDateValue(undefined);
+      setDate?.(undefined);
+      return;
+    }
+
+    const range: DateRange = {
+      from: newDate.from,
+      to: newDate.to || newDate.from, // Si no hay 'to', usamos 'from'
+      empresaId
+    };
+
+    setDateValue(range);
+    setDate?.(range);
+  };
+
+  const formatDate = (date: Date) => {
+    return format(date, "dd/MM/yyyy", {
+      // Puedes agregar configuración regional por empresa si es necesario
+    });
   };
 
   return (
@@ -43,17 +70,21 @@ export function DatePickerWithRange({ className, date, setDate }: DatePickerWith
         <PopoverTrigger asChild>
           <Button
             id="date"
-            variant={"outline"}
-            className={cn("w-full justify-start text-left font-normal", !dateValue && "text-muted-foreground")}
+            variant="outline"
+            disabled={disabled}
+            className={cn(
+              "w-full justify-start text-left font-normal",
+              !dateValue && "text-muted-foreground"
+            )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
             {dateValue?.from ? (
               dateValue.to ? (
                 <>
-                  {format(dateValue.from, "dd/MM/yyyy")} - {format(dateValue.to, "dd/MM/yyyy")}
+                  {formatDate(dateValue.from)} - {formatDate(dateValue.to)}
                 </>
               ) : (
-                format(dateValue.from, "dd/MM/yyyy")
+                formatDate(dateValue.from)
               )
             ) : (
               <span>Seleccionar rango de fechas</span>
@@ -65,9 +96,13 @@ export function DatePickerWithRange({ className, date, setDate }: DatePickerWith
             initialFocus
             mode="range"
             defaultMonth={dateValue?.from}
-            selected={dateValue}
+            selected={{
+              from: dateValue?.from,
+              to: dateValue?.to
+            }}
             onSelect={handleDateChange}
             numberOfMonths={2}
+            disabled={disabled}
           />
         </PopoverContent>
       </Popover>
