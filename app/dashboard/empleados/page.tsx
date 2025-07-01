@@ -93,7 +93,7 @@ export default function EmpleadosPage() {
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <h2 className="text-2xl font-bold">Empleados</h2>
         <Button asChild>
-          <Link href="/dashboard/empleados">
+          <Link href="/dashboard/empleados/nuevo">
             <Plus className="mr-2" /> Nuevo Empleado
           </Link>
         </Button>
