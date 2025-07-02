@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr"; // Cambia a createServerClient
 import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
@@ -8,7 +8,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No hash provided" }, { status: 400 });
   }
 
-  const supabase = createRouteHandlerClient({ cookies });
+  const cookieStore = await cookies(); // Asegúrate de usar await
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          cookieStore.set(name, value, options);
+        },
+        remove(name: string, options: any) {
+          cookieStore.delete(name);
+        },
+      },
+    }
+  );
 
   const params = new URLSearchParams(hash.substring(1));
   const accessToken = params.get("access_token");
