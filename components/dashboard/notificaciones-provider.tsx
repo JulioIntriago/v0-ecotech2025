@@ -1,7 +1,8 @@
-"use client"
+"use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { supabase } from "@/lib/supabase"
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+import { useEmpresa } from "@/app/context/empresa-context";
 
 interface Notificacion {
   id: string;
@@ -12,6 +13,7 @@ interface Notificacion {
   leida: boolean;
   accion: string;
   icono: string;
+  empresa_id: number;
 }
 
 interface NotificacionesContextType {
@@ -21,99 +23,110 @@ interface NotificacionesContextType {
   marcarTodasLeidas: () => Promise<void>;
 }
 
-const NotificacionesContext = createContext<NotificacionesContextType | undefined>(undefined)
+const NotificacionesContext = createContext<NotificacionesContextType | undefined>(undefined);
 
 export const useNotificaciones = () => {
-  const context = useContext(NotificacionesContext)
+  const context = useContext(NotificacionesContext);
   if (!context) {
-    throw new Error("useNotificaciones debe ser usado dentro de un NotificacionesProvider")
+    throw new Error("useNotificaciones debe ser usado dentro de un NotificacionesProvider");
   }
-  return context
-}
+  return context;
+};
 
 export function NotificacionesProvider({ children }: { children: ReactNode }) {
-  const [notificacionesData, setNotificacionesData] = useState<Notificacion[]>([])
-  const [loading, setLoading] = useState(true)
+  const { empresaId, loading: empresaLoading } = useEmpresa();
+  const [notificacionesData, setNotificacionesData] = useState<Notificacion[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchNotificaciones = async () => {
-      const { data, error } = await supabase
-        .from("notificaciones")
-        .select("*")
-        .order("fecha", { ascending: false })
-        .order("leida", { ascending: true })
-
-      if (error) {
-        console.error("Error fetching notificaciones:", error)
-      } else {
-        setNotificacionesData(data || [])
+    async function fetchNotificaciones() {
+      if (empresaLoading || !empresaId) {
+        setLoading(true);
+        return;
       }
-      setLoading(false)
+
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("notificaciones")
+          .select("*")
+          .eq("empresa_id", empresaId)
+          .order("leida", { ascending: true }) // Primero no leídas
+          .order("fecha", { ascending: false }); // Luego más recientes
+        if (error) {
+          console.error("Error fetching notificaciones:", error);
+        } else {
+          setNotificacionesData(data || []);
+        }
+      } catch (err) {
+        console.error("Error en fetchNotificaciones:", err);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    fetchNotificaciones()
+    fetchNotificaciones();
 
-    const subscription = supabase
-      .channel("notificaciones")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notificaciones" },
-        (payload) => {
-          setNotificacionesData((prev) => [payload.new as Notificacion, ...prev])
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "notificaciones" },
-        (payload) => {
-          setNotificacionesData((prev) =>
-            prev.map((n) => (n.id === payload.new.id ? payload.new as Notificacion : n)),
-          )
-        },
-      )
-      .subscribe()
+    if (empresaId) {
+      const channel = supabase
+        .channel(`notif-changes-${empresaId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "notificaciones", filter: `empresa_id=eq.${empresaId}` },
+          (payload) => {
+            console.log("Nueva notificación:", payload.new);
+            setNotificacionesData((prev) => [payload.new as Notificacion, ...prev]);
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "notificaciones", filter: `empresa_id=eq.${empresaId}` },
+          (payload) => {
+            console.log("Notificación actualizada:", payload.new);
+            setNotificacionesData((prev) =>
+              prev.map((n) => (n.id === payload.new.id ? (payload.new as Notificacion) : n))
+            );
+          }
+        )
+        .subscribe((status) => {
+          console.log("Suscripción notificaciones estado:", status);
+        });
 
-    return () => {
-      subscription.unsubscribe()
+      return () => {
+        channel.unsubscribe();
+      };
     }
-  }, [])
+  }, [empresaId, empresaLoading]);
 
   const marcarTodasLeidas = async () => {
+    if (!empresaId || !notificacionesData.length) return;
     const { error } = await supabase
       .from("notificaciones")
       .update({ leida: true })
-      .eq("leida", false)
-
+      .eq("empresa_id", empresaId)
+      .eq("leida", false);
     if (error) {
-      console.error("Error marking all as read:", error)
+      console.error("Error marcando todas como leídas:", error);
     } else {
-      setNotificacionesData(
-        notificacionesData.map((notificacion) => ({
-          ...notificacion,
-          leida: true,
-        })),
-      )
+      setNotificacionesData((prev) => prev.map((n) => ({ ...n, leida: true })));
     }
-  }
+  };
 
   const marcarLeida = async (id: string) => {
     const { error } = await supabase
       .from("notificaciones")
       .update({ leida: true })
-      .eq("id", id)
-
+      .eq("id", id);
     if (error) {
-      console.error("Error marking as read:", error)
+      console.error("Error marcando como leída:", error);
     } else {
-      setNotificacionesData(
-        notificacionesData.map((notificacion) =>
-          notificacion.id === id ? { ...notificacion, leida: true } : notificacion,
-        ),
-      )
+      setNotificacionesData((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, leida: true } : n))
+      );
     }
-  }
+  };
 
-  const noLeidas = notificacionesData.filter((n) => !n.leida).length
+  const noLeidas = notificacionesData.filter((n) => !n.leida).length;
 
   return (
     <NotificacionesContext.Provider
@@ -121,5 +134,5 @@ export function NotificacionesProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </NotificacionesContext.Provider>
-  )
+  );
 }

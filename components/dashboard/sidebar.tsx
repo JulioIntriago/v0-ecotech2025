@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useSidebar } from "./sidebar-provider"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSidebar } from "./sidebar-provider";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   BarChart3,
   ClipboardList,
@@ -15,62 +15,28 @@ import {
   Settings,
   LogOut,
   Menu,
-  Smartphone,
   Truck,
   Bell,
-} from "lucide-react"
+} from "lucide-react";
+import { useConfig } from "@/app/context/config-context";
+import { supabase } from "@/lib/supabase";
 
 const sidebarLinks = [
-  {
-    title: "Dashboard",
-    href: "/dashboard",
-    icon: BarChart3,
-  },
-  {
-    title: "Órdenes de Trabajo",
-    href: "/dashboard/ordenes",
-    icon: ClipboardList,
-  },
-  {
-    title: "Inventario",
-    href: "/dashboard/inventario",
-    icon: Package,
-  },
-  {
-    title: "Punto de Venta",
-    href: "/dashboard/ventas",
-    icon: ShoppingCart,
-  },
-  {
-    title: "Clientes",
-    href: "/dashboard/clientes",
-    icon: Users,
-  },
-  {
-    title: "Empleados",
-    href: "/dashboard/empleados",
-    icon: Users,
-  },
-  {
-    title: "Proveedores",
-    href: "/dashboard/proveedores",
-    icon: Truck,
-  },
-  {
-    title: "Notificaciones",
-    href: "/dashboard/notificaciones",
-    icon: Bell,
-  },
-  {
-    title: "Configuración",
-    href: "/dashboard/configuracion",
-    icon: Settings,
-  },
-]
+  { title: "Dashboard", href: "/dashboard", icon: BarChart3 },
+  { title: "Órdenes de Trabajo", href: "/dashboard/ordenes", icon: ClipboardList },
+  { title: "Inventario", href: "/dashboard/inventario", icon: Package },
+  { title: "Punto de Venta", href: "/dashboard/ventas", icon: ShoppingCart },
+  { title: "Clientes", href: "/dashboard/clientes", icon: Users },
+  { title: "Empleados", href: "/dashboard/empleados", icon: Users },
+  { title: "Proveedores", href: "/dashboard/proveedores", icon: Truck },
+  { title: "Notificaciones", href: "/dashboard/notificaciones", icon: Bell },
+  { title: "Configuración", href: "/dashboard/configuracion", icon: Settings },
+];
 
 export function DashboardSidebar() {
-  const pathname = usePathname()
-  const { isOpen, setIsOpen, isMobile } = useSidebar()
+  const pathname = usePathname();
+  const { isOpen, setIsOpen, isMobile } = useSidebar();
+  const { config } = useConfig();
 
   if (isMobile) {
     return (
@@ -90,29 +56,35 @@ export function DashboardSidebar() {
           </SheetContent>
         </Sheet>
       </>
-    )
+    );
   }
 
   return (
     <div className={cn("h-screen border-r bg-background transition-all duration-300", isOpen ? "w-64" : "w-16")}>
       <SidebarContent pathname={pathname} isCollapsed={!isOpen} />
     </div>
-  )
+  );
 }
 
 function SidebarContent({
   pathname,
   isCollapsed = false,
 }: {
-  pathname: string
-  isCollapsed?: boolean
+  pathname: string;
+  isCollapsed?: boolean;
 }) {
+  const { config } = useConfig();
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center border-b px-3 py-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <Smartphone className="h-6 w-6 text-primary" />
-          {!isCollapsed && <span className="text-lg font-bold">Eco_Tech</span>}
+          <img
+            src={config.logo || "/default-logo.png"}
+            alt={`${config.nombreEmpresa} Logo`}
+            className="h-6 w-6 object-contain"
+          />
+          {!isCollapsed && <span className="text-lg font-bold">{config.nombreEmpresa || "Eco_Tech"}</span>}
         </Link>
       </div>
       <div className="flex-1 overflow-auto py-2">
@@ -137,12 +109,15 @@ function SidebarContent({
         <Button
           variant="ghost"
           className={cn("w-full justify-start text-muted-foreground", isCollapsed && "justify-center px-0")}
+          onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.href = "/auth/login";
+          }}
         >
           <LogOut className="mr-2 h-5 w-5" />
           {!isCollapsed && <span>Cerrar Sesión</span>}
         </Button>
       </div>
     </div>
-  )
+  );
 }
-
