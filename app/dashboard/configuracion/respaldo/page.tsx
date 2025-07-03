@@ -1,25 +1,25 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { ArrowLeft, Download, Upload, Calendar, Clock, Database } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
-import { Progress } from "@/components/ui/progress"
-import { supabase } from "@/lib/supabase"
+import type React from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ArrowLeft, Download, Upload, Calendar, Clock, Database } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { Progress } from "@/components/ui/progress";
+import { supabase } from "@/lib/supabase";
 
 interface ConfigRespaldos {
-  respaldoAutomatico: boolean
-  frecuencia: string
-  horaRespaldo: string
-  diasRetencion: string
+  respaldoAutomatico: boolean;
+  frecuencia: string;
+  horaRespaldo: string;
+  diasRetencion: string;
 }
 
 export default function RespaldoPage() {
@@ -28,81 +28,99 @@ export default function RespaldoPage() {
     frecuencia: "",
     horaRespaldo: "",
     diasRetencion: "",
-  })
-  const [archivoRestauracion, setArchivoRestauracion] = useState<File | null>(null)
-  const [progreso, setProgreso] = useState(0)
-  const [cargando, setCargando] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  });
+  const [archivoRestauracion, setArchivoRestauracion] = useState<File | null>(null);
+  const [progreso, setProgreso] = useState(0);
+  const [cargando, setCargando] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [empresaId, setEmpresaId] = useState<number | null>(null);
 
   // Cargar configuración desde Supabase
   useEffect(() => {
     const fetchConfig = async () => {
-      setLoading(true)
+      setLoading(true);
+      try {
+        // Obtener el usuario autenticado
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) throw new Error("Usuario no autenticado");
 
-      const { data, error } = await supabase
-        .from("configuraciones")
-        .select("respaldos")
-        .eq("id", "global_config")
-        .single()
+        // Obtener el empresa_id del usuario
+        const { data: usuario, error: usuarioError } = await supabase
+          .from("usuarios")
+          .select("empresa_id")
+          .eq("id", user.id)
+          .single();
+        if (usuarioError || !usuario) throw new Error("No se encontró el usuario");
 
-      if (error) {
-        console.error("Error fetching respaldos configuracion:", error)
+        const fetchedEmpresaId = usuario.empresa_id;
+        setEmpresaId(fetchedEmpresaId);
+
+        // Consultar la configuración usando empresa_id
+        const { data, error } = await supabase
+          .from("configuraciones")
+          .select("respaldos")
+          .eq("empresa_id", fetchedEmpresaId)
+          .single();
+
+        if (error && error.code !== "PGRST116") throw error; // PGRST116 = sin resultados
+        if (data?.respaldos) {
+          setConfig(data.respaldos);
+        }
+      } catch (error: any) {
+        console.error("Error fetching respaldos configuracion:", error);
         toast({
           title: "Error",
-          description: "No se pudo cargar la configuración de respaldos.",
+          description: error.message || "No se pudo cargar la configuración de respaldos.",
           variant: "destructive",
-        })
-      } else if (data && data.respaldos) {
-        setConfig(data.respaldos)
+        });
+      } finally {
+        setLoading(false);
       }
+    };
 
-      setLoading(false)
-    }
-
-    fetchConfig()
-  }, [])
+    fetchConfig();
+  }, []);
 
   // Simular respaldo de datos
   const realizarRespaldo = async () => {
-    setCargando(true)
-    setProgreso(0)
+    setCargando(true);
+    setProgreso(0);
 
     try {
-      // Simulación de progreso
       const intervalo = setInterval(() => {
         setProgreso((prevProgreso) => {
-          const nuevoProgreso = prevProgreso + 10
+          const nuevoProgreso = prevProgreso + 10;
           if (nuevoProgreso >= 100) {
-            clearInterval(intervalo)
+            clearInterval(intervalo);
             setTimeout(() => {
-              setCargando(false)
+              setCargando(false);
               toast({
                 title: "Respaldo completado",
                 description: "El respaldo de la base de datos se ha completado correctamente.",
-              })
-            }, 500)
-            return 100
+              });
+            }, 500);
+            return 100;
           }
-          return nuevoProgreso
-        })
-      }, 500)
+          return nuevoProgreso;
+        });
+      }, 500);
     } catch (error) {
       toast({
         title: "Error",
         description: "No se pudo completar el respaldo.",
         variant: "destructive",
-      })
-      setCargando(false)
+      });
+      setCargando(false);
     }
-  }
+  };
 
   // Manejar selección de archivo para restauración
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setArchivoRestauracion(e.target.files[0])
+      setArchivoRestauracion(e.target.files[0]);
     }
-  }
+  };
 
   // Simular restauración de datos
   const restaurarDatos = async () => {
@@ -111,88 +129,102 @@ export default function RespaldoPage() {
         title: "Error",
         description: "Por favor selecciona un archivo de respaldo.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     if (!confirm("¿Estás seguro de que deseas restaurar la base de datos? Esta acción no se puede deshacer.")) {
-      return
+      return;
     }
 
-    setCargando(true)
-    setProgreso(0)
+    setCargando(true);
+    setProgreso(0);
 
     try {
-      // Simulación de progreso
       const intervalo = setInterval(() => {
         setProgreso((prevProgreso) => {
-          const nuevoProgreso = prevProgreso + 5
+          const nuevoProgreso = prevProgreso + 5;
           if (nuevoProgreso >= 100) {
-            clearInterval(intervalo)
+            clearInterval(intervalo);
             setTimeout(() => {
-              setCargando(false)
+              setCargando(false);
               toast({
                 title: "Restauración completada",
                 description: "La base de datos ha sido restaurada correctamente.",
-              })
-              setArchivoRestauracion(null)
-            }, 500)
-            return 100
+              });
+              setArchivoRestauracion(null);
+            }, 500);
+            return 100;
           }
-          return nuevoProgreso
-        })
-      }, 300)
+          return nuevoProgreso;
+        });
+      }, 300);
     } catch (error) {
       toast({
         title: "Error",
         description: "No se pudo completar la restauración.",
         variant: "destructive",
-      })
-      setCargando(false)
+      });
+      setCargando(false);
     }
-  }
+  };
 
   // Guardar configuración de respaldos en Supabase
   const guardarConfiguracion = async () => {
-    setSaving(true)
+    if (!empresaId) {
+      toast({
+        title: "Error",
+        description: "No se ha identificado la empresa.",
+        variant: "destructive",
+      });
+      return;
+    }
 
+    setSaving(true);
     try {
       const { error } = await supabase
         .from("configuraciones")
         .upsert({
-          id: "global_config",
+          empresa_id: empresaId,
           respaldos: config,
           updated_at: new Date().toISOString(),
-        })
+        });
 
-      if (error) throw error
+      if (error) throw error;
 
       toast({
         title: "Configuración guardada",
         description: "La configuración de respaldos ha sido actualizada.",
-      })
-    } catch (error) {
-      console.error("Error saving respaldos configuracion:", error)
+      });
+    } catch (error: any) {
+      console.error("Error saving respaldos configuracion:", error);
       toast({
         title: "Error",
         description: "No se pudo guardar la configuración.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   // Manejar cambios en los campos
-  const handleConfigChange = (field: keyof ConfigRespaldos, value: any) => {
+  const handleConfigChange = (field: keyof ConfigRespaldos, value: any
+
+) => {
     setConfig((prev) => ({
       ...prev,
       [field]: value,
-    }))
-  }
+    }));
+  };
 
   if (loading) {
-    return <div className="flex flex-col gap-6 p-6"><DashboardHeader /><div>Cargando configuración...</div></div>
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <DashboardHeader />
+        <div>Cargando configuración...</div>
+      </div>
+    );
   }
 
   return (
@@ -363,11 +395,11 @@ export default function RespaldoPage() {
             </div>
           </div>
 
-          <Button onClick={guardarConfiguracion} disabled={saving || !config.respaldoAutomatico}>
+          <Button onClick={guardarConfiguracion} disabled={saving}>
             {saving ? "Guardando..." : "Guardar Configuración"}
           </Button>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
